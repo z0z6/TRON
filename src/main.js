@@ -3,9 +3,13 @@ import { Game } from './Game.js';
 import { Grid } from './Grid.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
 import { LobbyUI } from './LobbyUI.js';
+import { SynthwaveEnvironment } from './Environment.js';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000011);
+// Tło zastępuje teraz gradientowa "kopuła nieba" z SynthwaveEnvironment -
+// ten kolor to tylko awaryjny fallback, gdyby sfera nieba z jakiegoś powodu
+// nie wyrenderowała się (np. bardzo stary GPU).
+scene.background = new THREE.Color(0x0c0420);
 
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -28,7 +32,10 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
+const environment = new SynthwaveEnvironment(scene);
+
 const grid = new Grid(100, 50);
+grid.setColor(0xff2f9e); // różowa siatka, zgodnie z referencyjną grafiką synthwave
 scene.add(grid.mesh);
 
 const game = new Game(scene, camera);
