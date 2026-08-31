@@ -9,37 +9,6 @@
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000011; }
         canvas { display: block; width: 100%; height: 100%; }
 
-        #hud {
-            position: fixed;
-            left: 16px;
-            bottom: 16px;
-            z-index: 10;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            font-size: 13px;
-            color: #aef1ff;
-            background: rgba(0, 10, 20, 0.55);
-            border: 1px solid rgba(0, 243, 255, 0.35);
-            border-radius: 6px;
-            padding: 10px 14px;
-            line-height: 1.6;
-            pointer-events: none;
-            text-shadow: 0 0 6px rgba(0, 243, 255, 0.5);
-        }
-
-        #hud .key {
-            display: inline-block;
-            background: #10222c;
-            border: 1px solid #00f3ff;
-            border-radius: 3px;
-            padding: 0 5px;
-            margin-right: 3px;
-            font-family: monospace;
-        }
-
-        @media (hover: none) and (pointer: coarse) {
-            #hud { display: none; }
-        }
-
         #scoreHud {
             position: fixed;
             top: 16px;
@@ -52,11 +21,7 @@
             text-shadow: 0 0 6px rgba(0, 243, 255, 0.5);
         }
 
-        #scoreHud .score {
-            font-size: 28px;
-            font-weight: bold;
-        }
-
+        #scoreHud .score { font-size: 28px; font-weight: bold; }
         #scoreHud .combo {
             font-size: 15px;
             color: #ffcc00;
@@ -125,20 +90,9 @@
             transform: translate(-50%, 0);
         }
 
-        #achievementToast .icon {
-            font-size: 26px;
-        }
-
-        #achievementToast .name {
-            font-weight: bold;
-            font-size: 14px;
-            color: #ffd24a;
-        }
-
-        #achievementToast .desc {
-            font-size: 12px;
-            color: #d8c79a;
-        }
+        #achievementToast .icon { font-size: 26px; }
+        #achievementToast .name { font-weight: bold; font-size: 14px; color: #ffd24a; }
+        #achievementToast .desc { font-size: 12px; color: #d8c79a; }
 
         /* === STARTUP ROTATE MESSAGE === */
         .startup-rotate-message {
@@ -163,9 +117,6 @@
             position: relative;
             width: 200px;
             height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
         .phone-icon {
@@ -174,8 +125,11 @@
             height: 140px;
             border: 4px solid #00f3ff;
             border-radius: 12px;
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.6), inset 0 0 20px rgba(0, 243, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.6);
             background: rgba(0, 243, 255, 0.1);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
         .phone-icon::after {
@@ -195,17 +149,15 @@
         }
 
         .phone-icon.landscape {
-            transform: rotate(-90deg);
+            transform: translate(-50%, -50%) rotate(-90deg);
             border-color: #ff0055;
-            box-shadow: 0 0 30px rgba(255, 0, 85, 0.6), inset 0 0 20px rgba(255, 0, 85, 0.2);
+            box-shadow: 0 0 30px rgba(255, 0, 85, 0.6);
             background: rgba(255, 0, 85, 0.1);
             opacity: 0;
             animation: phoneRotateIn 1.5s ease-in-out forwards;
         }
 
-        .phone-icon.landscape::after {
-            background: #ff0055;
-        }
+        .phone-icon.landscape::after { background: #ff0055; }
 
         .arrow-rotate {
             position: absolute;
@@ -217,84 +169,41 @@
             border-radius: 50%;
             opacity: 0;
             animation: arrowSpin 1.5s ease-in-out forwards;
-            box-shadow: 0 0 20px rgba(255, 0, 85, 0.8);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
         @keyframes phoneRotateOut {
-            0%, 30% { opacity: 1; transform: rotate(0deg) scale(1); }
-            70%, 100% { opacity: 0; transform: rotate(-90deg) scale(0.8); }
+            0%, 30% { opacity: 1; transform: translate(-50%, -50%) rotate(0deg); }
+            70%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-90deg); }
         }
 
         @keyframes phoneRotateIn {
-            0%, 30% { opacity: 0; transform: rotate(-90deg) scale(0.8); }
-            70%, 100% { opacity: 1; transform: rotate(-90deg) scale(1); }
+            0%, 30% { opacity: 0; transform: translate(-50%, -50%) rotate(-90deg); }
+            70%, 100% { opacity: 1; transform: translate(-50%, -50%) rotate(-90deg); }
         }
 
         @keyframes arrowSpin {
-            0%, 10% { opacity: 0; transform: rotate(0deg) scale(0.5); }
-            50%, 60% { opacity: 1; transform: rotate(-180deg) scale(1); }
-            90%, 100% { opacity: 0; transform: rotate(-360deg) scale(0.5); }
+            0%, 10% { opacity: 0; transform: translate(-50%, -50%) rotate(0deg); }
+            50%, 60% { opacity: 1; transform: translate(-50%, -50%) rotate(-180deg); }
+            90%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-360deg); }
         }
 
         .glitch-text {
-            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            font-size: clamp(1.8rem, 6vw, 2.5rem);
             font-weight: bold;
             color: #fff;
-            text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff, 0 0 40px #00f3ff;
-            letter-spacing: 8px;
-            position: relative;
-            animation: glitch 1.5s ease-in-out;
-        }
-
-        .glitch-text::before,
-        .glitch-text::after {
-            content: attr(data-text);
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
-        .glitch-text::before {
-            color: #00f3ff;
-            animation: glitch-1 0.3s ease-in-out;
-            clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
-        }
-
-        .glitch-text::after {
-            color: #ff0055;
-            animation: glitch-2 0.3s ease-in-out;
-            clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
-        }
-
-        @keyframes glitch {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(-2px, 2px); }
-            40% { transform: translate(-2px, -2px); }
-            60% { transform: translate(2px, 2px); }
-            80% { transform: translate(2px, -2px); }
-        }
-
-        @keyframes glitch-1 {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(3px, 0); }
-            40% { transform: translate(-3px, 0); }
-        }
-
-        @keyframes glitch-2 {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(-3px, 0); }
-            40% { transform: translate(3px, 0); }
+            text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff;
+            letter-spacing: 4px;
         }
 
         .instruction-text {
-            font-size: clamp(1rem, 3vw, 1.2rem);
+            font-size: clamp(1rem, 3.5vw, 1.2rem);
             color: #e0f7fc;
             text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
             max-width: 400px;
             line-height: 1.6;
-            animation: fadeIn 1.5s ease-in-out;
         }
 
         .loading-bar {
@@ -303,13 +212,11 @@
             background: rgba(0, 243, 255, 0.2);
             border-radius: 2px;
             overflow: hidden;
-            box-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
         }
 
         .loading-progress {
             height: 100%;
             background: linear-gradient(90deg, #00f3ff, #ff0055);
-            box-shadow: 0 0 15px #00f3ff;
             animation: loadingProgress 1.5s ease-out forwards;
             width: 0;
         }
@@ -317,11 +224,6 @@
         @keyframes loadingProgress {
             0% { width: 0; }
             100% { width: 100%; }
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         /* === TOUCH CONTROLS === */
@@ -359,7 +261,6 @@
             font-size: 1.8rem;
             touch-action: none;
             user-select: none;
-            transition: all 0.1s ease;
         }
 
         .turn-btn:active, .turn-btn.pressed {
@@ -391,7 +292,6 @@
             color: #ff77ff;
             touch-action: none;
             user-select: none;
-            transition: all 0.1s ease;
         }
 
         .fn-btn-3d:active, .fn-btn-3d.pressed {
@@ -399,8 +299,8 @@
             box-shadow: 0 0 14px rgba(255, 0, 255, 0.6);
         }
 
-        .fn-btn-3d .fn-icon-3d { font-size: 1rem; line-height: 1; }
-        .fn-btn-3d .fn-label-3d { font-size: 0.5rem; font-weight: bold; letter-spacing: 0.5px; line-height: 1; }
+        .fn-btn-3d .fn-icon-3d { font-size: 1rem; }
+        .fn-btn-3d .fn-label-3d { font-size: 0.5rem; font-weight: bold; }
 
         .touch-start-btn {
             display: none;
@@ -426,63 +326,17 @@
         @media (hover: none) and (pointer: coarse) {
             .touch-start-btn { display: block; }
         }
-
-        /* === FORCE LANDSCAPE === */
-        .force-landscape canvas {
-            position: fixed;
-            width: 100vh;
-            height: 100vw;
-            top: 50%;
-            left: 50%;
-            transform: rotate(90deg);
-            transform-origin: center center;
-        }
-
-        .force-landscape #scoreHud,
-        .force-landscape #effectsHud,
-        .force-landscape #toastHud,
-        .force-landscape #hud {
-            transform: rotate(-90deg);
-            transform-origin: center center;
-        }
-
-        .force-landscape #scoreHud {
-            top: 50%;
-            right: calc(50% - 200px);
-            transform: rotate(-90deg) translate(-200px, -200px);
-        }
-
-        .force-landscape .touch-controls {
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-        }
-
-        .force-landscape .turn-pad {
-            right: max(20px, env(safe-area-inset-right, 20px));
-            bottom: max(20px, env(safe-area-inset-bottom, 20px));
-        }
-
-        .force-landscape .fn-controls-3d {
-            left: max(20px, env(safe-area-inset-left, 20px));
-            bottom: max(20px, env(safe-area-inset-bottom, 20px));
-        }
-
-        .force-landscape .touch-start-btn {
-            bottom: max(100px, env(safe-area-inset-bottom, 100px));
-        }
     </style>
   <script type="module" crossorigin src="/TRON/3d/assets/index-Cl0pjRZJ.js"></script>
 </head>
 <body>
-    <!-- STARTUP ROTATE MESSAGE -->
     <div class="startup-rotate-message" id="startupRotateMessage">
         <div class="rotate-animation">
             <div class="phone-icon portrait"></div>
             <div class="arrow-rotate"></div>
             <div class="phone-icon landscape"></div>
         </div>
-        <h2 class="glitch-text" data-text="OBRÓĆ URZĄDZENIE">OBRÓĆ URZĄDZENIE</h2>
+        <h2 class="glitch-text">OBRÓĆ URZĄDZENIE</h2>
         <p class="instruction-text">Aby kontynuować, obróć telefon do poziomu</p>
         <div class="loading-bar">
             <div class="loading-progress"></div>
@@ -502,11 +356,6 @@
             <div class="desc" id="achievementDesc"></div>
         </div>
     </div>
-    <div id="hud">
-        <div><span class="key">SPACE</span>start / <span class="key">R</span>restart</div>
-        <div><span class="key">←</span><span class="key">→</span> / <span class="key">A</span><span class="key">D</span> skręt</div>
-        <div><span class="key">C</span>kamera <span class="key">M</span>wycisz <span class="key">L</span>multiplayer</div>
-    </div>
 
     <div class="touch-controls" aria-hidden="true">
         <div class="turn-pad" id="turnPad">
@@ -515,7 +364,7 @@
         </div>
         <div class="fn-controls-3d">
             <button type="button" class="fn-btn-3d" id="fnRestart3d"><span class="fn-icon-3d">↻</span><span class="fn-label-3d">RESTART</span></button>
-            <button type="button" class="fn-btn-3d" id="fnCamera3d"><span class="fn-icon-3d">🎥</span><span class="fn-label-3d">KAMERA</span></button>
+            <button type="button" class="fn-btn-3d" id="fnCamera3d"><span class="fn-icon-3d"></span><span class="fn-label-3d">KAMERA</span></button>
             <button type="button" class="fn-btn-3d" id="fnMute3d"><span class="fn-icon-3d">🔇</span><span class="fn-label-3d">WYCISZ</span></button>
             <button type="button" class="fn-btn-3d" id="fnLobby3d"><span class="fn-icon-3d">🌐</span><span class="fn-label-3d">SIEĆ</span></button>
         </div>
@@ -524,44 +373,24 @@
     <button type="button" class="touch-start-btn" id="touchStartBtn">URUCHOM CYKL</button>
 
     <script>
-        // === STARTUP ROTATE MESSAGE LOGIC - 3D VERSION ===
-        (function setupStartupRotateMessage3D() {
+        (function() {
             const messageEl = document.getElementById('startupRotateMessage');
             const DISPLAY_DURATION = 1500;
-            
             const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
             
             if (!isTouchDevice) {
-                if (messageEl) messageEl.style.display = 'none';
+                messageEl.style.display = 'none';
                 return;
             }
             
-            function showRotateMessage() {
-                if (!messageEl) return;
-                messageEl.classList.add('active');
-                
+            messageEl.classList.add('active');
+            
+            setTimeout(() => {
+                messageEl.classList.remove('active');
                 setTimeout(() => {
-                    messageEl.classList.remove('active');
-                    setTimeout(() => {
-                        messageEl.style.display = 'none';
-                        forceLandscapeOrientation();
-                    }, 300);
-                }, DISPLAY_DURATION);
-            }
-            
-            function forceLandscapeOrientation() {
-                document.body.classList.add('force-landscape');
-                sessionStorage.setItem('tron3dLandscapeForced', 'true');
-            }
-            
-            const alreadyForced = sessionStorage.getItem('tron3dLandscapeForced') === 'true';
-            
-            if (!alreadyForced) {
-                showRotateMessage();
-            } else {
-                if (messageEl) messageEl.style.display = 'none';
-                forceLandscapeOrientation();
-            }
+                    messageEl.style.display = 'none';
+                }, 300);
+            }, DISPLAY_DURATION);
         })();
     </script>
 </body>
