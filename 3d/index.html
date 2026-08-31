@@ -11,54 +11,54 @@
 
         #scoreHud {
             position: fixed;
-            top: 16px;
-            right: 16px;
+            top: 20px;
+            right: 20px;
             z-index: 10;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             color: #aef1ff;
             text-align: right;
             pointer-events: none;
-            text-shadow: 0 0 6px rgba(0, 243, 255, 0.5);
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
         }
 
-        #scoreHud .score { font-size: 28px; font-weight: bold; }
+        #scoreHud .score { font-size: 32px; font-weight: bold; }
         #scoreHud .combo {
-            font-size: 15px;
+            font-size: 16px;
             color: #ffcc00;
-            text-shadow: 0 0 6px rgba(255, 204, 0, 0.6);
+            text-shadow: 0 0 8px rgba(255, 204, 0, 0.7);
             min-height: 20px;
         }
 
         #effectsHud {
             position: fixed;
-            top: 90px;
-            right: 16px;
+            top: 100px;
+            right: 20px;
             z-index: 10;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 6px;
             align-items: flex-end;
         }
 
         #effectsHud .effect {
             font-family: monospace;
-            font-size: 12px;
+            font-size: 13px;
             color: #0f0;
-            background: rgba(0, 20, 10, 0.6);
-            border: 1px solid rgba(0, 255, 0, 0.4);
+            background: rgba(0, 20, 10, 0.7);
+            border: 1px solid rgba(0, 255, 0, 0.5);
             border-radius: 4px;
-            padding: 2px 8px;
+            padding: 3px 10px;
         }
 
         #toastHud {
             position: fixed;
-            top: 160px;
-            right: 16px;
+            top: 180px;
+            right: 20px;
             z-index: 10;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            font-size: 14px;
+            font-size: 15px;
             color: #ffee00;
-            text-shadow: 0 0 8px rgba(255, 238, 0, 0.7);
+            text-shadow: 0 0 10px rgba(255, 238, 0, 0.8);
             pointer-events: none;
             text-align: right;
             transition: opacity 0.15s linear;
@@ -66,17 +66,17 @@
 
         #achievementToast {
             position: fixed;
-            top: 24px;
+            top: 30px;
             left: 50%;
             z-index: 20;
             display: flex;
             align-items: center;
             gap: 12px;
-            background: linear-gradient(135deg, rgba(20, 10, 0, 0.92), rgba(40, 25, 0, 0.92));
-            border: 1px solid rgba(255, 200, 0, 0.6);
+            background: linear-gradient(135deg, rgba(20, 10, 0, 0.95), rgba(40, 25, 0, 0.95));
+            border: 1px solid rgba(255, 200, 0, 0.7);
             border-radius: 8px;
-            padding: 10px 18px;
-            box-shadow: 0 0 20px rgba(255, 200, 0, 0.35);
+            padding: 12px 20px;
+            box-shadow: 0 0 25px rgba(255, 200, 0, 0.4);
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             color: #ffe9b0;
             pointer-events: none;
@@ -90,141 +90,9 @@
             transform: translate(-50%, 0);
         }
 
-        #achievementToast .icon { font-size: 26px; }
-        #achievementToast .name { font-weight: bold; font-size: 14px; color: #ffd24a; }
-        #achievementToast .desc { font-size: 12px; color: #d8c79a; }
-
-        /* === STARTUP ROTATE MESSAGE === */
-        .startup-rotate-message {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 1000;
-            background: rgba(5, 8, 17, 0.98);
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 30px;
-            padding: 40px 20px;
-            text-align: center;
-        }
-
-        .startup-rotate-message.active {
-            display: flex;
-        }
-
-        .rotate-animation {
-            position: relative;
-            width: 200px;
-            height: 200px;
-        }
-
-        .phone-icon {
-            position: absolute;
-            width: 80px;
-            height: 140px;
-            border: 4px solid #00f3ff;
-            border-radius: 12px;
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.6);
-            background: rgba(0, 243, 255, 0.1);
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-
-        .phone-icon::after {
-            content: '';
-            position: absolute;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 20px;
-            height: 3px;
-            background: #00f3ff;
-            border-radius: 2px;
-        }
-
-        .phone-icon.portrait {
-            animation: phoneRotateOut 1.5s ease-in-out forwards;
-        }
-
-        .phone-icon.landscape {
-            transform: translate(-50%, -50%) rotate(-90deg);
-            border-color: #ff0055;
-            box-shadow: 0 0 30px rgba(255, 0, 85, 0.6);
-            background: rgba(255, 0, 85, 0.1);
-            opacity: 0;
-            animation: phoneRotateIn 1.5s ease-in-out forwards;
-        }
-
-        .phone-icon.landscape::after { background: #ff0055; }
-
-        .arrow-rotate {
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            border: 3px solid transparent;
-            border-top-color: #ff0055;
-            border-right-color: #ff0055;
-            border-radius: 50%;
-            opacity: 0;
-            animation: arrowSpin 1.5s ease-in-out forwards;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-
-        @keyframes phoneRotateOut {
-            0%, 30% { opacity: 1; transform: translate(-50%, -50%) rotate(0deg); }
-            70%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-90deg); }
-        }
-
-        @keyframes phoneRotateIn {
-            0%, 30% { opacity: 0; transform: translate(-50%, -50%) rotate(-90deg); }
-            70%, 100% { opacity: 1; transform: translate(-50%, -50%) rotate(-90deg); }
-        }
-
-        @keyframes arrowSpin {
-            0%, 10% { opacity: 0; transform: translate(-50%, -50%) rotate(0deg); }
-            50%, 60% { opacity: 1; transform: translate(-50%, -50%) rotate(-180deg); }
-            90%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-360deg); }
-        }
-
-        .glitch-text {
-            font-size: clamp(1.8rem, 6vw, 2.5rem);
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff;
-            letter-spacing: 4px;
-        }
-
-        .instruction-text {
-            font-size: clamp(1rem, 3.5vw, 1.2rem);
-            color: #e0f7fc;
-            text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
-            max-width: 400px;
-            line-height: 1.6;
-        }
-
-        .loading-bar {
-            width: min(300px, 80vw);
-            height: 4px;
-            background: rgba(0, 243, 255, 0.2);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        .loading-progress {
-            height: 100%;
-            background: linear-gradient(90deg, #00f3ff, #ff0055);
-            animation: loadingProgress 1.5s ease-out forwards;
-            width: 0;
-        }
-
-        @keyframes loadingProgress {
-            0% { width: 0; }
-            100% { width: 100%; }
-        }
+        #achievementToast .icon { font-size: 28px; }
+        #achievementToast .name { font-weight: bold; font-size: 15px; color: #ffd24a; }
+        #achievementToast .desc { font-size: 13px; color: #d8c79a; }
 
         /* === TOUCH CONTROLS === */
         .touch-controls {
@@ -241,10 +109,11 @@
 
         .turn-pad {
             position: absolute;
-            right: max(20px, env(safe-area-inset-right, 20px));
-            bottom: max(20px, env(safe-area-inset-bottom, 20px));
+            right: max(25px, env(safe-area-inset-right, 25px));
+            top: 50%;
+            transform: translateY(-50%);
             display: flex;
-            gap: 10px;
+            gap: 15px;
             pointer-events: auto;
         }
 
@@ -252,29 +121,31 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: min(70px, 10vw);
-            height: min(70px, 10vw);
-            background: rgba(0, 243, 255, 0.1);
-            border: 2px solid rgba(0, 243, 255, 0.5);
-            border-radius: 12px;
+            width: min(80px, 12vw);
+            height: min(80px, 12vw);
+            background: rgba(0, 243, 255, 0.15);
+            border: 3px solid rgba(0, 243, 255, 0.6);
+            border-radius: 14px;
             color: #00f3ff;
-            font-size: 1.8rem;
+            font-size: 2rem;
             touch-action: none;
             user-select: none;
+            transition: all 0.1s ease;
         }
 
         .turn-btn:active, .turn-btn.pressed {
-            background: rgba(0, 243, 255, 0.4);
-            box-shadow: 0 0 14px rgba(0, 243, 255, 0.7);
+            background: rgba(0, 243, 255, 0.5);
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.8);
         }
 
         .fn-controls-3d {
             position: absolute;
-            left: max(20px, env(safe-area-inset-left, 20px));
-            bottom: max(20px, env(safe-area-inset-bottom, 20px));
+            left: max(25px, env(safe-area-inset-left, 25px));
+            top: 50%;
+            transform: translateY(-50%);
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 12px;
             pointer-events: auto;
         }
 
@@ -283,42 +154,43 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 1px;
-            width: min(65px, 9vw);
-            height: min(48px, 6.5vw);
-            background: rgba(255, 0, 255, 0.1);
-            border: 2px solid rgba(255, 0, 255, 0.5);
-            border-radius: 8px;
+            gap: 2px;
+            width: min(75px, 11vw);
+            height: min(55px, 8vw);
+            background: rgba(255, 0, 255, 0.15);
+            border: 2px solid rgba(255, 0, 255, 0.6);
+            border-radius: 10px;
             color: #ff77ff;
             touch-action: none;
             user-select: none;
+            transition: all 0.1s ease;
         }
 
         .fn-btn-3d:active, .fn-btn-3d.pressed {
-            background: rgba(255, 0, 255, 0.4);
-            box-shadow: 0 0 14px rgba(255, 0, 255, 0.6);
+            background: rgba(255, 0, 255, 0.5);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
         }
 
-        .fn-btn-3d .fn-icon-3d { font-size: 1rem; }
-        .fn-btn-3d .fn-label-3d { font-size: 0.5rem; font-weight: bold; }
+        .fn-btn-3d .fn-icon-3d { font-size: 1.2rem; }
+        .fn-btn-3d .fn-label-3d { font-size: 0.6rem; font-weight: bold; letter-spacing: 1px; }
 
         .touch-start-btn {
             display: none;
             position: fixed;
             left: 50%;
-            bottom: max(100px, env(safe-area-inset-bottom, 100px));
+            bottom: max(120px, env(safe-area-inset-bottom, 120px));
             transform: translateX(-50%);
             z-index: 25;
-            padding: clamp(10px, 3vw, 14px) clamp(24px, 6vw, 32px);
+            padding: clamp(14px, 4vw, 18px) clamp(36px, 10vw, 50px);
             background: rgba(0, 243, 255, 0.15);
-            border: 2px solid #00f3ff;
-            border-radius: 30px;
+            border: 3px solid #00f3ff;
+            border-radius: 40px;
             color: #00f3ff;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             font-weight: bold;
-            font-size: clamp(0.9rem, 2.5vw, 1rem);
-            letter-spacing: 2px;
-            box-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
+            font-size: clamp(1rem, 3vw, 1.2rem);
+            letter-spacing: 3px;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.5);
             touch-action: none;
             user-select: none;
         }
@@ -330,19 +202,6 @@
   <script type="module" crossorigin src="/TRON/3d/assets/index-Cl0pjRZJ.js"></script>
 </head>
 <body>
-    <div class="startup-rotate-message" id="startupRotateMessage">
-        <div class="rotate-animation">
-            <div class="phone-icon portrait"></div>
-            <div class="arrow-rotate"></div>
-            <div class="phone-icon landscape"></div>
-        </div>
-        <h2 class="glitch-text">OBRÓĆ URZĄDZENIE</h2>
-        <p class="instruction-text">Aby kontynuować, obróć telefon do poziomu</p>
-        <div class="loading-bar">
-            <div class="loading-progress"></div>
-        </div>
-    </div>
-
     <div id="scoreHud">
         <div class="score" id="scoreValue">0</div>
         <div class="combo" id="comboValue"></div>
@@ -373,25 +232,57 @@
     <button type="button" class="touch-start-btn" id="touchStartBtn">URUCHOM CYKL</button>
 
     <script>
-        (function() {
-            const messageEl = document.getElementById('startupRotateMessage');
-            const DISPLAY_DURATION = 1500;
-            const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-            
-            if (!isTouchDevice) {
-                messageEl.style.display = 'none';
-                return;
+        // Touch controls dla 3D
+        document.querySelectorAll('.turn-btn').forEach((btn) => {
+            const action = btn.dataset.turn === 'left' ? 'turnLeft' : 'turnRight';
+            const press = (e) => {
+                e.preventDefault();
+                btn.classList.add('pressed');
+                if (typeof window.game !== 'undefined') {
+                    window.game.handlePlayerInput(action);
+                }
+            };
+            const release = (e) => {
+                e.preventDefault();
+                btn.classList.remove('pressed');
+            };
+            btn.addEventListener('touchstart', press, { passive: false });
+            btn.addEventListener('touchend', release, { passive: false });
+            btn.addEventListener('touchcancel', release, { passive: false });
+        });
+
+        document.getElementById('touchStartBtn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined' && !window.game.isStarted) {
+                window.game.startSinglePlayer('medium');
             }
-            
-            messageEl.classList.add('active');
-            
-            setTimeout(() => {
-                messageEl.classList.remove('active');
-                setTimeout(() => {
-                    messageEl.style.display = 'none';
-                }, 300);
-            }, DISPLAY_DURATION);
-        })();
+        }, { passive: false });
+
+        document.getElementById('fnRestart3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined' && !window.game.isMultiplayer) {
+                window.game.restart('medium');
+            }
+        }, { passive: false });
+
+        document.getElementById('fnCamera3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined') {
+                window.game.toggleCameraMode();
+            }
+        }, { passive: false });
+
+        document.getElementById('fnMute3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined') {
+                window.game.toggleMute();
+            }
+        }, { passive: false });
+
+        document.getElementById('fnLobby3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            // Lobby logic
+        }, { passive: false });
     </script>
 </body>
 </html>
