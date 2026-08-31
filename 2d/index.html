@@ -21,65 +21,15 @@
         .game-container {
             width: 100%;
             height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 10px;
-            z-index: 10;
-        }
-
-        .title {
-            font-size: clamp(1.5rem, 4vw, 2.5rem);
-            letter-spacing: 4px;
-            text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff;
-            margin-bottom: 10px;
-            color: #fff;
-        }
-
-        .title .highlight {
-            color: #ff0055;
-            text-shadow: 0 0 10px #ff0055, 0 0 20px #ff0055;
-        }
-
-        .scoreboard {
-            display: flex;
-            gap: 30px;
-            justify-content: center;
-            font-size: clamp(0.9rem, 2.5vw, 1.1rem);
-        }
-
-        .score {
-            text-shadow: 0 0 8px currentColor;
-        }
-
-        .p1-score { color: #00f3ff; }
-        .p2-score { color: #ff0055; }
-
-        main {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
             position: relative;
         }
 
         .canvas-wrapper {
-            position: relative;
+            position: fixed;
+            inset: 0;
+            background-color: #000;
             border: 3px solid #00f3ff;
             box-shadow: 0 0 25px rgba(0, 243, 255, 0.4), inset 0 0 15px rgba(0, 243, 255, 0.2);
-            border-radius: 4px;
-            background-color: #000;
-            width: min(800px, 90vw, calc(90vh * 4 / 3));
-            aspect-ratio: 4 / 3;
-            touch-action: none;
-            cursor: pointer;
         }
 
         #tronCanvas {
@@ -89,7 +39,7 @@
         }
 
         .overlay {
-            position: absolute;
+            position: fixed;
             inset: 0;
             display: flex;
             flex-direction: column;
@@ -97,8 +47,8 @@
             justify-content: center;
             background: rgba(5, 8, 17, 0.92);
             gap: 15px;
-            transition: opacity 0.3s ease;
             z-index: 20;
+            transition: opacity 0.3s ease;
         }
 
         .overlay.hidden {
@@ -107,14 +57,14 @@
         }
 
         #overlay-title {
-            font-size: clamp(1.5rem, 4vw, 2rem);
+            font-size: clamp(1.5rem, 5vw, 2rem);
             color: #00f3ff;
             text-shadow: 0 0 15px #00f3ff;
             letter-spacing: 3px;
         }
 
         #overlay-msg {
-            font-size: clamp(0.9rem, 2.5vw, 1.1rem);
+            font-size: clamp(0.9rem, 3vw, 1.1rem);
             color: #e0f7fc;
             text-align: center;
             padding: 0 20px;
@@ -126,17 +76,11 @@
             border: 2px solid #00f3ff;
             border-radius: 30px;
             color: #00f3ff;
-            font-size: clamp(0.9rem, 2.5vw, 1.1rem);
+            font-size: clamp(0.9rem, 3vw, 1.1rem);
             font-weight: bold;
             letter-spacing: 2px;
             cursor: pointer;
             box-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
-            transition: all 0.2s ease;
-        }
-
-        .btn-start:hover {
-            background: rgba(0, 243, 255, 0.3);
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.6);
         }
 
         /* === STARTUP ROTATE MESSAGE === */
@@ -162,9 +106,6 @@
             position: relative;
             width: 200px;
             height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
         .phone-icon {
@@ -173,8 +114,11 @@
             height: 140px;
             border: 4px solid #00f3ff;
             border-radius: 12px;
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.6), inset 0 0 20px rgba(0, 243, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.6);
             background: rgba(0, 243, 255, 0.1);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
         .phone-icon::after {
@@ -194,9 +138,9 @@
         }
 
         .phone-icon.landscape {
-            transform: rotate(-90deg);
+            transform: translate(-50%, -50%) rotate(-90deg);
             border-color: #ff0055;
-            box-shadow: 0 0 30px rgba(255, 0, 85, 0.6), inset 0 0 20px rgba(255, 0, 85, 0.2);
+            box-shadow: 0 0 30px rgba(255, 0, 85, 0.6);
             background: rgba(255, 0, 85, 0.1);
             opacity: 0;
             animation: phoneRotateIn 1.5s ease-in-out forwards;
@@ -216,84 +160,42 @@
             border-radius: 50%;
             opacity: 0;
             animation: arrowSpin 1.5s ease-in-out forwards;
-            box-shadow: 0 0 20px rgba(255, 0, 85, 0.8);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
         @keyframes phoneRotateOut {
-            0%, 30% { opacity: 1; transform: rotate(0deg) scale(1); }
-            70%, 100% { opacity: 0; transform: rotate(-90deg) scale(0.8); }
+            0%, 30% { opacity: 1; transform: translate(-50%, -50%) rotate(0deg); }
+            70%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-90deg); }
         }
 
         @keyframes phoneRotateIn {
-            0%, 30% { opacity: 0; transform: rotate(-90deg) scale(0.8); }
-            70%, 100% { opacity: 1; transform: rotate(-90deg) scale(1); }
+            0%, 30% { opacity: 0; transform: translate(-50%, -50%) rotate(-90deg); }
+            70%, 100% { opacity: 1; transform: translate(-50%, -50%) rotate(-90deg); }
         }
 
         @keyframes arrowSpin {
-            0%, 10% { opacity: 0; transform: rotate(0deg) scale(0.5); }
-            50%, 60% { opacity: 1; transform: rotate(-180deg) scale(1); }
-            90%, 100% { opacity: 0; transform: rotate(-360deg) scale(0.5); }
+            0%, 10% { opacity: 0; transform: translate(-50%, -50%) rotate(0deg); }
+            50%, 60% { opacity: 1; transform: translate(-50%, -50%) rotate(-180deg); }
+            90%, 100% { opacity: 0; transform: translate(-50%, -50%) rotate(-360deg); }
         }
 
         .glitch-text {
-            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            font-size: clamp(1.8rem, 6vw, 2.5rem);
             font-weight: bold;
             color: #fff;
-            text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff, 0 0 40px #00f3ff;
-            letter-spacing: 8px;
-            position: relative;
+            text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff;
+            letter-spacing: 4px;
             animation: glitch 1.5s ease-in-out;
         }
 
-        .glitch-text::before,
-        .glitch-text::after {
-            content: attr(data-text);
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
-        .glitch-text::before {
-            color: #00f3ff;
-            animation: glitch-1 0.3s ease-in-out;
-            clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
-        }
-
-        .glitch-text::after {
-            color: #ff0055;
-            animation: glitch-2 0.3s ease-in-out;
-            clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
-        }
-
-        @keyframes glitch {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(-2px, 2px); }
-            40% { transform: translate(-2px, -2px); }
-            60% { transform: translate(2px, 2px); }
-            80% { transform: translate(2px, -2px); }
-        }
-
-        @keyframes glitch-1 {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(3px, 0); }
-            40% { transform: translate(-3px, 0); }
-        }
-
-        @keyframes glitch-2 {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(-3px, 0); }
-            40% { transform: translate(3px, 0); }
-        }
-
         .instruction-text {
-            font-size: clamp(1rem, 3vw, 1.2rem);
+            font-size: clamp(1rem, 3.5vw, 1.2rem);
             color: #e0f7fc;
             text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
             max-width: 400px;
             line-height: 1.6;
-            animation: fadeIn 1.5s ease-in-out;
         }
 
         .loading-bar {
@@ -302,13 +204,11 @@
             background: rgba(0, 243, 255, 0.2);
             border-radius: 2px;
             overflow: hidden;
-            box-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
         }
 
         .loading-progress {
             height: 100%;
             background: linear-gradient(90deg, #00f3ff, #ff0055);
-            box-shadow: 0 0 15px #00f3ff;
             animation: loadingProgress 1.5s ease-out forwards;
             width: 0;
         }
@@ -318,9 +218,12 @@
             100% { width: 100%; }
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
         }
 
         /* === TOUCH CONTROLS === */
@@ -344,8 +247,8 @@
             grid-template-columns: repeat(3, 1fr);
             grid-template-rows: repeat(3, 1fr);
             gap: 5px;
-            width: min(160px, 22vw);
-            height: min(160px, 22vw);
+            width: min(160px, 25vw);
+            height: min(160px, 25vw);
             pointer-events: auto;
         }
 
@@ -357,10 +260,9 @@
             border: 2px solid rgba(0, 243, 255, 0.5);
             border-radius: 8px;
             color: #00f3ff;
-            font-size: clamp(1.5rem, 4vw, 2rem);
+            font-size: clamp(1.2rem, 4vw, 1.8rem);
             touch-action: none;
             user-select: none;
-            transition: all 0.1s ease;
         }
 
         .dpad-btn:active, .dpad-btn.pressed {
@@ -389,15 +291,14 @@
             align-items: center;
             justify-content: center;
             gap: 2px;
-            width: min(65px, 9vw);
-            height: min(48px, 6.5vw);
+            width: min(65px, 10vw);
+            height: min(48px, 7vw);
             background: rgba(255, 0, 255, 0.1);
             border: 2px solid rgba(255, 0, 255, 0.5);
             border-radius: 8px;
             color: #ff77ff;
             touch-action: none;
             user-select: none;
-            transition: all 0.1s ease;
         }
 
         .fn-btn:active, .fn-btn.pressed {
@@ -405,76 +306,37 @@
             box-shadow: 0 0 14px rgba(255, 0, 255, 0.6);
         }
 
-        .fn-icon { font-size: 1.2rem; line-height: 1; }
-        .fn-label { font-size: 0.6rem; font-weight: bold; letter-spacing: 0.5px; line-height: 1; }
+        .fn-icon { font-size: 1.2rem; }
+        .fn-label { font-size: 0.6rem; font-weight: bold; }
 
-        /* === FORCE LANDSCAPE === */
-        .force-landscape .game-container {
+        /* === SCOREBOARD === */
+        .scoreboard {
             position: fixed;
-            width: 100vh;
-            height: 100vw;
-            top: 50%;
+            top: 10px;
             left: 50%;
-            transform: rotate(90deg);
-            transform-origin: center center;
-        }
-
-        .force-landscape .canvas-wrapper {
-            width: min(90vh, 90vw);
-            height: min(calc(90vh * 3 / 4), calc(90vw * 3 / 4));
-            max-width: 800px;
-            max-height: 600px;
-        }
-
-        .force-landscape header,
-        .force-landscape footer {
-            display: none;
-        }
-
-        footer {
-            margin-top: 10px;
-            text-align: center;
-            font-size: 0.9rem;
-            color: #8899aa;
-        }
-
-        .controls-info {
+            transform: translateX(-50%);
             display: flex;
-            gap: 20px;
-            justify-content: center;
-            flex-wrap: wrap;
+            gap: 30px;
+            z-index: 15;
+            font-size: clamp(0.9rem, 2.5vw, 1.1rem);
         }
 
-        .ctrl-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        .score {
+            text-shadow: 0 0 8px currentColor;
         }
 
-        .key {
-            display: inline-block;
-            background: #10222c;
-            border: 1px solid #00f3ff;
-            border-radius: 3px;
-            padding: 2px 8px;
-            font-family: monospace;
-            color: #00f3ff;
-        }
-
-        @media (hover: none) and (pointer: coarse) {
-            footer { display: none; }
-        }
+        .p1-score { color: #00f3ff; }
+        .p2-score { color: #ff0055; }
     </style>
 </head>
 <body>
-    <!-- STARTUP ROTATE MESSAGE -->
     <div class="startup-rotate-message" id="startupRotateMessage">
         <div class="rotate-animation">
             <div class="phone-icon portrait"></div>
             <div class="arrow-rotate"></div>
             <div class="phone-icon landscape"></div>
         </div>
-        <h2 class="glitch-text" data-text="OBRÓĆ URZĄDZENIE">OBRÓĆ URZĄDZENIE</h2>
+        <h2 class="glitch-text">OBRÓĆ URZĄDZENIE</h2>
         <p class="instruction-text">Aby kontynuować, obróć telefon do poziomu</p>
         <div class="loading-bar">
             <div class="loading-progress"></div>
@@ -482,29 +344,24 @@
     </div>
 
     <div class="game-container">
-        <header>
-            <h1 class="title">TRON <span class="highlight">LIGHT CYCLES</span></h1>
-            <div class="scoreboard">
-                <div class="score p1-score">P1 (CYAN): <span id="p1-score">0</span></div>
-                <div class="score p2-score">P2 (MAGENTA): <span id="p2-score">0</span></div>
+        <div class="scoreboard">
+            <div class="score p1-score">P1: <span id="p1-score">0</span></div>
+            <div class="score p2-score">P2: <span id="p2-score">0</span></div>
+        </div>
+
+        <div class="canvas-wrapper">
+            <canvas id="tronCanvas"></canvas>
+            <div id="overlay" class="overlay">
+                <h2 id="overlay-title">SYSTEM READY</h2>
+                <p id="overlay-msg">Kliknij przycisk lub naciśnij <strong>SPACJĘ</strong></p>
+                <button id="start-btn" class="btn-start">URUCHOM CYKL</button>
             </div>
-        </header>
-        
-        <main>
-            <div class="canvas-wrapper">
-                <canvas id="tronCanvas" width="800" height="600"></canvas>
-                <div id="overlay" class="overlay">
-                    <h2 id="overlay-title">SYSTEM READY</h2>
-                    <p id="overlay-msg">Kliknij przycisk poniżej lub naciśnij <strong>SPACJĘ</strong></p>
-                    <button id="start-btn" class="btn-start">URUCHOM CYKL</button>
-                </div>
-            </div>
-        </main>
+        </div>
 
         <div class="touch-controls" aria-hidden="true">
             <div class="dpad" id="dpad">
                 <button type="button" class="dpad-btn dpad-up" data-dir="up">▲</button>
-                <button type="button" class="dpad-btn dpad-left" data-dir="left"></button>
+                <button type="button" class="dpad-btn dpad-left" data-dir="left">◀</button>
                 <button type="button" class="dpad-btn dpad-right" data-dir="right">▶</button>
                 <button type="button" class="dpad-btn dpad-down" data-dir="down">▼</button>
             </div>
@@ -513,85 +370,31 @@
                 <button type="button" class="fn-btn" id="fnRestart"><span class="fn-icon">↻</span><span class="fn-label">RESTART</span></button>
             </div>
         </div>
-
-        <footer>
-            <div class="controls-info">
-                <div class="ctrl-group">
-                    <strong>Gracz 1 (Cyan):</strong> <span class="key">↑</span> <span class="key">←</span> <span class="key">↓</span> <span class="key">→</span>
-                </div>
-                <div class="ctrl-group">
-                    <strong>Gracz 2 (Magenta):</strong> <span class="key">AI</span> (komputer)
-                </div>
-                <div class="ctrl-group">
-                    <strong>Pauza / Reset:</strong> <span class="key">SPACE</span> / <span class="key">R</span>
-                </div>
-            </div>
-        </footer>
     </div>
 
     <script>
-        // === STARTUP ROTATE MESSAGE LOGIC ===
-        (function setupStartupRotateMessage() {
+        // === STARTUP ROTATE MESSAGE ===
+        (function() {
             const messageEl = document.getElementById('startupRotateMessage');
-            const body = document.body;
             const DISPLAY_DURATION = 1500;
-            
             const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
             
             if (!isTouchDevice) {
-                if (messageEl) messageEl.style.display = 'none';
+                messageEl.style.display = 'none';
                 return;
             }
             
-            function showRotateMessage() {
-                if (!messageEl) return;
-                messageEl.classList.add('active');
-                
+            messageEl.classList.add('active');
+            
+            setTimeout(() => {
+                messageEl.classList.remove('active');
                 setTimeout(() => {
-                    messageEl.classList.remove('active');
-                    setTimeout(() => {
-                        messageEl.style.display = 'none';
-                        forceLandscapeOrientation();
-                    }, 300);
-                }, DISPLAY_DURATION);
-            }
-            
-            function forceLandscapeOrientation() {
-                body.classList.add('force-landscape');
-                sessionStorage.setItem('tronLandscapeForced', 'true');
-                adjustCanvasSize();
-            }
-            
-            const alreadyForced = sessionStorage.getItem('tronLandscapeForced') === 'true';
-            
-            if (!alreadyForced) {
-                showRotateMessage();
-            } else {
-                if (messageEl) messageEl.style.display = 'none';
-                forceLandscapeOrientation();
-            }
+                    messageEl.style.display = 'none';
+                }, 300);
+            }, DISPLAY_DURATION);
         })();
 
-        // === ADJUST CANVAS SIZE ===
-        function adjustCanvasSize() {
-            const canvas = document.getElementById('tronCanvas');
-            const wrapper = document.querySelector('.canvas-wrapper');
-            
-            if (!canvas || !wrapper) return;
-            
-            const rect = wrapper.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-            
-            // Redraw if game is running
-            if (typeof draw === 'function' && isRunning) {
-                draw();
-            }
-        }
-
-        window.addEventListener('resize', adjustCanvasSize);
-
-        // === GAME LOGIC ===
+        // === CANVAS SETUP ===
         const canvas = document.getElementById('tronCanvas');
         const ctx = canvas.getContext('2d');
         const overlay = document.getElementById('overlay');
@@ -602,12 +405,21 @@
         const p2ScoreEl = document.getElementById('p2-score');
 
         const GRID_SIZE = 20;
-        let CELL_SIZE = canvas.width / GRID_SIZE;
+        let CELL_SIZE;
+
+        function resizeCanvas() {
+            const wrapper = document.querySelector('.canvas-wrapper');
+            canvas.width = wrapper.clientWidth;
+            canvas.height = wrapper.clientHeight;
+            CELL_SIZE = canvas.width / GRID_SIZE;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
         let p1, p2, isRunning, isPaused, scores, gameLoop;
 
         function initGame() {
-            CELL_SIZE = canvas.width / GRID_SIZE;
             p1 = { x: 5, y: 10, dx: 1, dy: 0, trail: [], color: '#00f3ff' };
             p2 = { x: 14, y: 10, dx: -1, dy: 0, trail: [], color: '#ff0055' };
             isRunning = false;
@@ -735,27 +547,21 @@
         }, 200);
 
         window.addEventListener('keydown', (e) => {
-            const key = e.key;
-            const code = e.code;
-
-            if (code === 'Space' || key === ' ') {
+            if (e.code === 'Space') {
                 e.preventDefault();
-                if (!isRunning) {
-                    startRound();
-                } else {
+                if (!isRunning) startRound();
+                else {
                     isPaused = !isPaused;
                     overlay.classList.toggle('hidden', !isPaused);
                     if (isPaused) {
                         overlayTitle.textContent = "PAUZA";
-                        overlayTitle.style.color = "#00f3ff";
-                        overlayMsg.innerHTML = "Gra wstrzymana";
                         startBtn.textContent = "WZNOWIENIE";
                     }
                 }
                 return;
             }
 
-            if (code === 'KeyR' || key.toLowerCase() === 'r') {
+            if (e.code === 'KeyR') {
                 scores = { p1: 0, p2: 0 };
                 p1ScoreEl.textContent = '0';
                 p2ScoreEl.textContent = '0';
@@ -765,56 +571,36 @@
 
             if (!isRunning || isPaused) return;
 
-            if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight') {
-                e.preventDefault();
-            }
-
-            if ((code === 'ArrowUp' || key === 'ArrowUp')) trySetPlayerDirection(p1, 0, -1);
-            if ((code === 'ArrowDown' || key === 'ArrowDown')) trySetPlayerDirection(p1, 0, 1);
-            if ((code === 'ArrowLeft' || key === 'ArrowLeft')) trySetPlayerDirection(p1, -1, 0);
-            if ((code === 'ArrowRight' || key === 'ArrowRight')) trySetPlayerDirection(p1, 1, 0);
+            if (e.code === 'ArrowUp') trySetPlayerDirection(p1, 0, -1);
+            if (e.code === 'ArrowDown') trySetPlayerDirection(p1, 0, 1);
+            if (e.code === 'ArrowLeft') trySetPlayerDirection(p1, -1, 0);
+            if (e.code === 'ArrowRight') trySetPlayerDirection(p1, 1, 0);
         });
 
-        (function setupDpad() {
-            const buttons = document.querySelectorAll('.dpad-btn');
-            const DIRS = {
-                up: [0, -1],
-                down: [0, 1],
-                left: [-1, 0],
-                right: [1, 0]
+        document.querySelectorAll('.dpad-btn').forEach((btn) => {
+            const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+            const [dx, dy] = DIRS[btn.dataset.dir];
+
+            const press = (e) => {
+                e.preventDefault();
+                btn.classList.add('pressed');
+                if (isRunning && !isPaused) trySetPlayerDirection(p1, dx, dy);
+            };
+            const release = (e) => {
+                e.preventDefault();
+                btn.classList.remove('pressed');
             };
 
-            buttons.forEach((btn) => {
-                const [dx, dy] = DIRS[btn.dataset.dir];
-
-                const press = (e) => {
-                    e.preventDefault();
-                    btn.classList.add('pressed');
-                    if (isRunning && !isPaused) trySetPlayerDirection(p1, dx, dy);
-                };
-                const release = (e) => {
-                    e.preventDefault();
-                    btn.classList.remove('pressed');
-                };
-
-                btn.addEventListener('touchstart', press, { passive: false });
-                btn.addEventListener('touchend', release, { passive: false });
-                btn.addEventListener('touchcancel', release, { passive: false });
-                btn.addEventListener('click', press);
-            });
-        })();
+            btn.addEventListener('touchstart', press, { passive: false });
+            btn.addEventListener('touchend', release, { passive: false });
+            btn.addEventListener('touchcancel', release, { passive: false });
+        });
 
         document.getElementById('fnPause').addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (isRunning) {
                 isPaused = !isPaused;
                 overlay.classList.toggle('hidden', !isPaused);
-                if (isPaused) {
-                    overlayTitle.textContent = "PAUZA";
-                    overlayTitle.style.color = "#00f3ff";
-                    overlayMsg.innerHTML = "Gra wstrzymana";
-                    startBtn.textContent = "WZNOWIENIE";
-                }
             }
         }, { passive: false });
 
@@ -827,9 +613,8 @@
         }, { passive: false });
 
         startBtn.addEventListener('click', () => {
-            if (!isRunning) {
-                startRound();
-            } else if (isPaused) {
+            if (!isRunning) startRound();
+            else if (isPaused) {
                 isPaused = false;
                 overlay.classList.add('hidden');
             }
@@ -837,7 +622,6 @@
 
         initGame();
         draw();
-        adjustCanvasSize();
     </script>
 </body>
 </html>
