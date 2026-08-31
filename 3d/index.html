@@ -2,12 +2,12 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>TRON Light Cycles 3D</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000011; }
-        canvas { display: block; }
+        canvas { display: block; width: 100%; height: 100%; }
 
         #hud {
             position: fixed;
@@ -140,7 +140,7 @@
             color: #d8c79a;
         }
 
-        /* === STARTUP ROTATE MESSAGE - 3D VERSION === */
+        /* === STARTUP ROTATE MESSAGE === */
         .startup-rotate-message {
             display: none;
             position: fixed;
@@ -176,7 +176,6 @@
             border-radius: 12px;
             box-shadow: 0 0 30px rgba(0, 243, 255, 0.6), inset 0 0 20px rgba(0, 243, 255, 0.2);
             background: rgba(0, 243, 255, 0.1);
-            transition: all 0.3s ease;
         }
 
         .phone-icon::after {
@@ -222,50 +221,26 @@
         }
 
         @keyframes phoneRotateOut {
-            0%, 30% {
-                opacity: 1;
-                transform: rotate(0deg) scale(1);
-            }
-            70%, 100% {
-                opacity: 0;
-                transform: rotate(-90deg) scale(0.8);
-            }
+            0%, 30% { opacity: 1; transform: rotate(0deg) scale(1); }
+            70%, 100% { opacity: 0; transform: rotate(-90deg) scale(0.8); }
         }
 
         @keyframes phoneRotateIn {
-            0%, 30% {
-                opacity: 0;
-                transform: rotate(-90deg) scale(0.8);
-            }
-            70%, 100% {
-                opacity: 1;
-                transform: rotate(-90deg) scale(1);
-            }
+            0%, 30% { opacity: 0; transform: rotate(-90deg) scale(0.8); }
+            70%, 100% { opacity: 1; transform: rotate(-90deg) scale(1); }
         }
 
         @keyframes arrowSpin {
-            0%, 10% {
-                opacity: 0;
-                transform: rotate(0deg) scale(0.5);
-            }
-            50%, 60% {
-                opacity: 1;
-                transform: rotate(-180deg) scale(1);
-            }
-            90%, 100% {
-                opacity: 0;
-                transform: rotate(-360deg) scale(0.5);
-            }
+            0%, 10% { opacity: 0; transform: rotate(0deg) scale(0.5); }
+            50%, 60% { opacity: 1; transform: rotate(-180deg) scale(1); }
+            90%, 100% { opacity: 0; transform: rotate(-360deg) scale(0.5); }
         }
 
         .glitch-text {
-            font-size: 2.5rem;
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
             font-weight: bold;
             color: #fff;
-            text-shadow: 
-                0 0 10px #00f3ff,
-                0 0 20px #00f3ff,
-                0 0 40px #00f3ff;
+            text-shadow: 0 0 10px #00f3ff, 0 0 20px #00f3ff, 0 0 40px #00f3ff;
             letter-spacing: 8px;
             position: relative;
             animation: glitch 1.5s ease-in-out;
@@ -314,7 +289,7 @@
         }
 
         .instruction-text {
-            font-size: 1.2rem;
+            font-size: clamp(1rem, 3vw, 1.2rem);
             color: #e0f7fc;
             text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
             max-width: 400px;
@@ -323,7 +298,7 @@
         }
 
         .loading-bar {
-            width: 300px;
+            width: min(300px, 80vw);
             height: 4px;
             background: rgba(0, 243, 255, 0.2);
             border-radius: 2px;
@@ -364,12 +339,11 @@
 
         .turn-pad {
             position: absolute;
-            right: max(30px, env(safe-area-inset-right));
-            bottom: max(30px, env(safe-area-inset-bottom));
+            right: max(20px, env(safe-area-inset-right, 20px));
+            bottom: max(20px, env(safe-area-inset-bottom, 20px));
             display: flex;
             gap: 10px;
             pointer-events: auto;
-            width: min(160px, 22vw);
         }
 
         .turn-btn {
@@ -395,8 +369,8 @@
 
         .fn-controls-3d {
             position: absolute;
-            left: max(30px, env(safe-area-inset-left));
-            bottom: max(30px, env(safe-area-inset-bottom));
+            left: max(20px, env(safe-area-inset-left, 20px));
+            bottom: max(20px, env(safe-area-inset-bottom, 20px));
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -432,17 +406,17 @@
             display: none;
             position: fixed;
             left: 50%;
-            bottom: max(100px, env(safe-area-inset-bottom));
+            bottom: max(100px, env(safe-area-inset-bottom, 100px));
             transform: translateX(-50%);
             z-index: 25;
-            padding: 14px 32px;
+            padding: clamp(10px, 3vw, 14px) clamp(24px, 6vw, 32px);
             background: rgba(0, 243, 255, 0.15);
             border: 2px solid #00f3ff;
             border-radius: 30px;
             color: #00f3ff;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             font-weight: bold;
-            font-size: 1rem;
+            font-size: clamp(0.9rem, 2.5vw, 1rem);
             letter-spacing: 2px;
             box-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
             touch-action: none;
@@ -453,75 +427,29 @@
             .touch-start-btn { display: block; }
         }
 
-        /* === ROTATE HINT (stary mechanizm) === */
-        .rotate-hint {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            background: rgba(5, 8, 17, 0.95);
-            color: #fff;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            font-size: 1.3rem;
-            gap: 18px;
-            padding: 20px;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        .rotate-icon {
-            width: 46px;
-            height: 74px;
-            border: 3px solid #00f3ff;
-            border-radius: 8px;
-            box-shadow: 0 0 16px rgba(0, 243, 255, 0.6);
-            position: relative;
-            animation: rotate-phone-3d 1.8s ease-in-out infinite;
-        }
-
-        .rotate-icon::after {
-            content: '';
-            position: absolute;
-            bottom: 6px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 14px;
-            height: 3px;
-            background: #00f3ff;
-            border-radius: 2px;
-        }
-
-        @keyframes rotate-phone-3d {
-            0%, 15%   { transform: rotate(0deg); }
-            45%, 65%  { transform: rotate(-90deg); }
-            85%, 100% { transform: rotate(-90deg); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            .rotate-icon { animation: none; transform: rotate(-90deg); }
-        }
-
-        @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-            .rotate-hint { display: flex; }
-        }
-
         /* === FORCE LANDSCAPE === */
         .force-landscape canvas {
             position: fixed;
-            transform: rotate(90deg);
-            transform-origin: center center;
             width: 100vh;
             height: 100vw;
             top: 50%;
             left: 50%;
-            margin-left: -50vw;
-            margin-top: -50vh;
+            transform: rotate(90deg);
+            transform-origin: center center;
         }
 
-        .force-landscape .rotate-hint {
-            display: none !important;
+        .force-landscape #scoreHud,
+        .force-landscape #effectsHud,
+        .force-landscape #toastHud,
+        .force-landscape #hud {
+            transform: rotate(-90deg);
+            transform-origin: center center;
+        }
+
+        .force-landscape #scoreHud {
+            top: 50%;
+            right: calc(50% - 200px);
+            transform: rotate(-90deg) translate(-200px, -200px);
         }
 
         .force-landscape .touch-controls {
@@ -531,21 +459,17 @@
         }
 
         .force-landscape .turn-pad {
-            width: min(160px, 22vw);
-        }
-
-        .force-landscape .turn-btn {
-            width: min(70px, 10vw);
-            height: min(70px, 10vw);
+            right: max(20px, env(safe-area-inset-right, 20px));
+            bottom: max(20px, env(safe-area-inset-bottom, 20px));
         }
 
         .force-landscape .fn-controls-3d {
-            gap: 8px;
+            left: max(20px, env(safe-area-inset-left, 20px));
+            bottom: max(20px, env(safe-area-inset-bottom, 20px));
         }
 
-        .force-landscape .fn-btn-3d {
-            width: min(65px, 9vw);
-            height: min(48px, 6.5vw);
+        .force-landscape .touch-start-btn {
+            bottom: max(100px, env(safe-area-inset-bottom, 100px));
         }
     </style>
   <script type="module" crossorigin src="/TRON/3d/assets/index-Cl0pjRZJ.js"></script>
@@ -593,16 +517,11 @@
             <button type="button" class="fn-btn-3d" id="fnRestart3d"><span class="fn-icon-3d">↻</span><span class="fn-label-3d">RESTART</span></button>
             <button type="button" class="fn-btn-3d" id="fnCamera3d"><span class="fn-icon-3d">🎥</span><span class="fn-label-3d">KAMERA</span></button>
             <button type="button" class="fn-btn-3d" id="fnMute3d"><span class="fn-icon-3d">🔇</span><span class="fn-label-3d">WYCISZ</span></button>
-            <button type="button" class="fn-btn-3d" id="fnLobby3d"><span class="fn-icon-3d"></span><span class="fn-label-3d">SIEĆ</span></button>
+            <button type="button" class="fn-btn-3d" id="fnLobby3d"><span class="fn-icon-3d">🌐</span><span class="fn-label-3d">SIEĆ</span></button>
         </div>
     </div>
 
     <button type="button" class="touch-start-btn" id="touchStartBtn">URUCHOM CYKL</button>
-
-    <div class="rotate-hint" id="rotateHint">
-        <div class="rotate-icon" aria-hidden="true"></div>
-        <p>Obróć telefon, aby zagrać wygodniej</p>
-    </div>
 
     <script>
         // === STARTUP ROTATE MESSAGE LOGIC - 3D VERSION ===
@@ -619,7 +538,6 @@
             
             function showRotateMessage() {
                 if (!messageEl) return;
-                
                 messageEl.classList.add('active');
                 
                 setTimeout(() => {
@@ -634,14 +552,6 @@
             function forceLandscapeOrientation() {
                 document.body.classList.add('force-landscape');
                 sessionStorage.setItem('tron3dLandscapeForced', 'true');
-                
-                // Dopasuj renderer Three.js jeśli dostępny
-                setTimeout(() => {
-                    if (typeof window.game !== 'undefined' && window.game.camera) {
-                        window.game.camera.aspect = window.innerWidth / window.innerHeight;
-                        window.game.camera.updateProjectionMatrix();
-                    }
-                }, 100);
             }
             
             const alreadyForced = sessionStorage.getItem('tron3dLandscapeForced') === 'true';
@@ -652,9 +562,6 @@
                 if (messageEl) messageEl.style.display = 'none';
                 forceLandscapeOrientation();
             }
-            
-            window.showRotateMessage3D = showRotateMessage;
-            window.forceLandscapeOrientation3D = forceLandscapeOrientation;
         })();
     </script>
 </body>
