@@ -11,9 +11,18 @@ const scene = new THREE.Scene();
 // nie wyrenderowała się (np. bardzo stary GPU).
 scene.background = new THREE.Color(0x0c0420);
 
+function getRenderSize() {
+  if (typeof window.__getFieldSize === 'function') {
+    return window.__getFieldSize();
+  }
+  return { width: window.innerWidth, height: window.innerHeight };
+}
+
+const initialSize = getRenderSize();
+
 const camera = new THREE.PerspectiveCamera(
   75,
-  window.innerWidth / window.innerHeight,
+  initialSize.width / initialSize.height,
   0.1,
   1000
 );
@@ -21,9 +30,12 @@ camera.position.set(0, 30, 30);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(initialSize.width, initialSize.height);
 renderer.setPixelRatio(window.devicePixelRatio);
-document.body.appendChild(renderer.domElement);
+// Renderuje do #gameCanvasWrap (zwężonego o marginesy na sterowanie dotykowe
+// - patrz orientation-lock w index.html), a nie bezpośrednio do <body>, żeby
+// motocykl nigdy nie jeździł "pod" D-Padem/klawiszami funkcyjnymi.
+(document.getElementById('gameCanvasWrap') || document.body).appendChild(renderer.domElement);
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
@@ -34,7 +46,7 @@ scene.add(directionalLight);
 
 const environment = new SynthwaveEnvironment(scene);
 
-const grid = new Grid(100, 50);
+const grid = new Grid(90, 45); // dopasowane do rzeczywistej granicy planszy (±45, patrz Game.js/AI.js)
 grid.setColor(0xff2f9e); // różowa siatka, zgodnie z referencyjną grafiką synthwave
 scene.add(grid.mesh);
 
@@ -221,17 +233,21 @@ function animate(currentTime) {
 
 animate(performance.now());
 
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+function applyViewportSize() {
+  const size = getRenderSize();
+  camera.aspect = size.width / size.height;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  renderer.setSize(size.width, size.height);
+}
+
+window.addEventListener('resize', applyViewportSize);
+window.addEventListener('game-viewport-resize', applyViewportSize);
 
 // --- Sterowanie dotykowe (telefony/tablety) ---
 // Te same akcje co klawiatura wyżej, tylko wywoływane dotykiem zamiast
 // zdarzeń 'keydown'. Używamy touchstart (nie click), żeby uniknąć typowego
 // dla mobile opóźnienia ~300ms między dotykiem a syntetycznym 'click'.
-document.querySelectorAll('.turn-btn').forEach((btn) => {
+document.querySelectorAll('.dpad-btn').forEach((btn) => {
   const action = btn.dataset.turn === 'left' ? 'turnLeft' : 'turnRight';
   const press = (e) => {
     e.preventDefault();
