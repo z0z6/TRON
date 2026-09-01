@@ -22,13 +22,13 @@
                więc D-Pad może być większy niż klawisze funkcyjne bez
                marnowania miejsca po stronie, gdzie stoi coś mniejszego. */
             --dpad-size: clamp(120px, calc(var(--vp-h) * 0.38), 165px);
-            --side-margin-right: calc(var(--dpad-size) + 6px);
+            --side-margin-right: calc(var(--dpad-size) + 3px);
             /* Klawisze funkcyjne - 75% poprzedniego rozmiaru (mniejsze), co
                automatycznie zwęża lewy margines i oddaje tę przestrzeń polu
                gry. */
             --fn-btn-w: clamp(44px, calc(var(--vp-h) * 0.11), 56px);
             --fn-btn-h: clamp(32px, calc(var(--vp-h) * 0.079), 41px);
-            --side-margin-left: calc(var(--fn-btn-w) + 12px);
+            --side-margin-left: calc(var(--fn-btn-w) + 6px);
         }
 
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000011; }
