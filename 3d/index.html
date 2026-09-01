@@ -2,63 +2,101 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TRON Light Cycles 3D</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000011; }
-        canvas { display: block; width: 100%; height: 100%; }
+        canvas { display: block; }
+
+        #hud {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            z-index: 10;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #aef1ff;
+            background: rgba(0, 10, 20, 0.55);
+            border: 1px solid rgba(0, 243, 255, 0.35);
+            border-radius: 6px;
+            padding: 10px 14px;
+            line-height: 1.6;
+            pointer-events: none;
+            text-shadow: 0 0 6px rgba(0, 243, 255, 0.5);
+        }
+
+        #hud .key {
+            display: inline-block;
+            background: #10222c;
+            border: 1px solid #00f3ff;
+            border-radius: 3px;
+            padding: 0 5px;
+            margin-right: 3px;
+            font-family: monospace;
+        }
+
+        /* Na urządzeniu dotykowym nie ma fizycznej klawiatury - legenda
+           klawiszy jest bezużyteczna i tylko nakłada się wizualnie na
+           przyciski dotykowe (.fn-controls-3d) w tym samym rogu ekranu. */
+        @media (hover: none) and (pointer: coarse) {
+            #hud { display: none; }
+        }
 
         #scoreHud {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            top: 16px;
+            right: 16px;
             z-index: 10;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             color: #aef1ff;
             text-align: right;
             pointer-events: none;
-            text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
+            text-shadow: 0 0 6px rgba(0, 243, 255, 0.5);
         }
 
-        #scoreHud .score { font-size: 32px; font-weight: bold; }
+        #scoreHud .score {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
         #scoreHud .combo {
-            font-size: 16px;
+            font-size: 15px;
             color: #ffcc00;
-            text-shadow: 0 0 8px rgba(255, 204, 0, 0.7);
+            text-shadow: 0 0 6px rgba(255, 204, 0, 0.6);
             min-height: 20px;
         }
 
         #effectsHud {
             position: fixed;
-            top: 100px;
-            right: 20px;
+            top: 90px;
+            right: 16px;
             z-index: 10;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
             align-items: flex-end;
         }
 
         #effectsHud .effect {
             font-family: monospace;
-            font-size: 13px;
+            font-size: 12px;
             color: #0f0;
-            background: rgba(0, 20, 10, 0.7);
-            border: 1px solid rgba(0, 255, 0, 0.5);
+            background: rgba(0, 20, 10, 0.6);
+            border: 1px solid rgba(0, 255, 0, 0.4);
             border-radius: 4px;
-            padding: 3px 10px;
+            padding: 2px 8px;
         }
 
         #toastHud {
             position: fixed;
-            top: 180px;
-            right: 20px;
+            top: 160px;
+            right: 16px;
             z-index: 10;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            font-size: 15px;
+            font-size: 14px;
             color: #ffee00;
-            text-shadow: 0 0 10px rgba(255, 238, 0, 0.8);
+            text-shadow: 0 0 8px rgba(255, 238, 0, 0.7);
             pointer-events: none;
             text-align: right;
             transition: opacity 0.15s linear;
@@ -66,17 +104,17 @@
 
         #achievementToast {
             position: fixed;
-            top: 30px;
+            top: 24px;
             left: 50%;
             z-index: 20;
             display: flex;
             align-items: center;
             gap: 12px;
-            background: linear-gradient(135deg, rgba(20, 10, 0, 0.95), rgba(40, 25, 0, 0.95));
-            border: 1px solid rgba(255, 200, 0, 0.7);
+            background: linear-gradient(135deg, rgba(20, 10, 0, 0.92), rgba(40, 25, 0, 0.92));
+            border: 1px solid rgba(255, 200, 0, 0.6);
             border-radius: 8px;
-            padding: 12px 20px;
-            box-shadow: 0 0 25px rgba(255, 200, 0, 0.4);
+            padding: 10px 18px;
+            box-shadow: 0 0 20px rgba(255, 200, 0, 0.35);
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             color: #ffe9b0;
             pointer-events: none;
@@ -90,11 +128,22 @@
             transform: translate(-50%, 0);
         }
 
-        #achievementToast .icon { font-size: 28px; }
-        #achievementToast .name { font-weight: bold; font-size: 15px; color: #ffd24a; }
-        #achievementToast .desc { font-size: 13px; color: #d8c79a; }
+        #achievementToast .icon {
+            font-size: 26px;
+        }
 
-        /* === TOUCH CONTROLS === */
+        #achievementToast .name {
+            font-weight: bold;
+            font-size: 14px;
+            color: #ffd24a;
+        }
+
+        #achievementToast .desc {
+            font-size: 12px;
+            color: #d8c79a;
+        }
+
+        /* --- Sterowanie dotykowe (tylko urządzenia dotykowe) --- */
         .touch-controls {
             display: none;
             position: fixed;
@@ -107,13 +156,16 @@
             .touch-controls { display: block; }
         }
 
+        /* 3D steruje tylko skrętem lewo/prawo (nie ma absolutnych kierunków
+           jak w 2D) - stąd dwa duże przyciski zamiast pełnego D-pada z 4
+           strzałkami. Utrzymujemy tę samą stronę (prawo) i stylistykę co
+           w wersji 2D dla spójności. */
         .turn-pad {
             position: absolute;
-            right: max(25px, env(safe-area-inset-right, 25px));
-            top: 50%;
-            transform: translateY(-50%);
+            right: max(20px, env(safe-area-inset-right));
+            bottom: max(20px, env(safe-area-inset-bottom));
             display: flex;
-            gap: 15px;
+            gap: 10px;
             pointer-events: auto;
         }
 
@@ -121,31 +173,29 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: min(80px, 12vw);
-            height: min(80px, 12vw);
-            background: rgba(0, 243, 255, 0.15);
-            border: 3px solid rgba(0, 243, 255, 0.6);
-            border-radius: 14px;
+            width: 64px;
+            height: 64px;
+            background: rgba(0, 243, 255, 0.1);
+            border: 2px solid rgba(0, 243, 255, 0.5);
+            border-radius: 12px;
             color: #00f3ff;
-            font-size: 2rem;
+            font-size: 1.8rem;
             touch-action: none;
             user-select: none;
-            transition: all 0.1s ease;
         }
 
         .turn-btn:active, .turn-btn.pressed {
-            background: rgba(0, 243, 255, 0.5);
-            box-shadow: 0 0 25px rgba(0, 243, 255, 0.8);
+            background: rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 14px rgba(0, 243, 255, 0.7);
         }
 
         .fn-controls-3d {
             position: absolute;
-            left: max(25px, env(safe-area-inset-left, 25px));
-            top: 50%;
-            transform: translateY(-50%);
+            left: max(20px, env(safe-area-inset-left));
+            bottom: max(20px, env(safe-area-inset-bottom));
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
             pointer-events: auto;
         }
 
@@ -154,49 +204,103 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 2px;
-            width: min(75px, 11vw);
-            height: min(55px, 8vw);
-            background: rgba(255, 0, 255, 0.15);
-            border: 2px solid rgba(255, 0, 255, 0.6);
-            border-radius: 10px;
+            gap: 1px;
+            width: 56px;
+            height: 42px;
+            background: rgba(255, 0, 255, 0.1);
+            border: 2px solid rgba(255, 0, 255, 0.5);
+            border-radius: 8px;
             color: #ff77ff;
             touch-action: none;
             user-select: none;
-            transition: all 0.1s ease;
         }
 
         .fn-btn-3d:active, .fn-btn-3d.pressed {
-            background: rgba(255, 0, 255, 0.5);
-            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+            background: rgba(255, 0, 255, 0.4);
+            box-shadow: 0 0 14px rgba(255, 0, 255, 0.6);
         }
 
-        .fn-btn-3d .fn-icon-3d { font-size: 1.2rem; }
-        .fn-btn-3d .fn-label-3d { font-size: 0.6rem; font-weight: bold; letter-spacing: 1px; }
+        .fn-btn-3d .fn-icon-3d { font-size: 1rem; line-height: 1; }
+        .fn-btn-3d .fn-label-3d { font-size: 0.5rem; font-weight: bold; letter-spacing: 0.5px; line-height: 1; }
 
+        /* Duży przycisk START na dotyk - SPACJA nie istnieje na telefonie */
         .touch-start-btn {
             display: none;
             position: fixed;
             left: 50%;
-            bottom: max(120px, env(safe-area-inset-bottom, 120px));
+            bottom: max(100px, env(safe-area-inset-bottom));
             transform: translateX(-50%);
             z-index: 25;
-            padding: clamp(14px, 4vw, 18px) clamp(36px, 10vw, 50px);
+            padding: 14px 32px;
             background: rgba(0, 243, 255, 0.15);
-            border: 3px solid #00f3ff;
-            border-radius: 40px;
+            border: 2px solid #00f3ff;
+            border-radius: 30px;
             color: #00f3ff;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             font-weight: bold;
-            font-size: clamp(1rem, 3vw, 1.2rem);
-            letter-spacing: 3px;
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.5);
+            font-size: 1rem;
+            letter-spacing: 2px;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
             touch-action: none;
             user-select: none;
         }
 
         @media (hover: none) and (pointer: coarse) {
             .touch-start-btn { display: block; }
+        }
+
+        /* --- Komunikat o obrocie ekranu --- */
+        .rotate-hint {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(5, 8, 17, 0.95);
+            color: #fff;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 1.3rem;
+            gap: 18px;
+            padding: 20px;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .rotate-icon {
+            width: 46px;
+            height: 74px;
+            border: 3px solid #00f3ff;
+            border-radius: 8px;
+            box-shadow: 0 0 16px rgba(0, 243, 255, 0.6);
+            position: relative;
+            animation: rotate-phone-3d 1.8s ease-in-out infinite;
+        }
+
+        .rotate-icon::after {
+            content: '';
+            position: absolute;
+            bottom: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 14px;
+            height: 3px;
+            background: #00f3ff;
+            border-radius: 2px;
+        }
+
+        @keyframes rotate-phone-3d {
+            0%, 15%   { transform: rotate(0deg); }
+            45%, 65%  { transform: rotate(-90deg); }
+            85%, 100% { transform: rotate(-90deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .rotate-icon { animation: none; transform: rotate(-90deg); }
+        }
+
+        @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+            .rotate-hint { display: flex; }
         }
     </style>
   <script type="module" crossorigin src="/TRON/3d/assets/index-Cl0pjRZJ.js"></script>
@@ -215,6 +319,11 @@
             <div class="desc" id="achievementDesc"></div>
         </div>
     </div>
+    <div id="hud">
+        <div><span class="key">SPACE</span>start / <span class="key">R</span>restart</div>
+        <div><span class="key">←</span><span class="key">→</span> / <span class="key">A</span><span class="key">D</span> skręt</div>
+        <div><span class="key">C</span>kamera <span class="key">M</span>wycisz <span class="key">L</span>multiplayer</div>
+    </div>
 
     <div class="touch-controls" aria-hidden="true">
         <div class="turn-pad" id="turnPad">
@@ -223,7 +332,7 @@
         </div>
         <div class="fn-controls-3d">
             <button type="button" class="fn-btn-3d" id="fnRestart3d"><span class="fn-icon-3d">↻</span><span class="fn-label-3d">RESTART</span></button>
-            <button type="button" class="fn-btn-3d" id="fnCamera3d"><span class="fn-icon-3d"></span><span class="fn-label-3d">KAMERA</span></button>
+            <button type="button" class="fn-btn-3d" id="fnCamera3d"><span class="fn-icon-3d">🎥</span><span class="fn-label-3d">KAMERA</span></button>
             <button type="button" class="fn-btn-3d" id="fnMute3d"><span class="fn-icon-3d">🔇</span><span class="fn-label-3d">WYCISZ</span></button>
             <button type="button" class="fn-btn-3d" id="fnLobby3d"><span class="fn-icon-3d">🌐</span><span class="fn-label-3d">SIEĆ</span></button>
         </div>
@@ -231,58 +340,10 @@
 
     <button type="button" class="touch-start-btn" id="touchStartBtn">URUCHOM CYKL</button>
 
-    <script>
-        // Touch controls dla 3D
-        document.querySelectorAll('.turn-btn').forEach((btn) => {
-            const action = btn.dataset.turn === 'left' ? 'turnLeft' : 'turnRight';
-            const press = (e) => {
-                e.preventDefault();
-                btn.classList.add('pressed');
-                if (typeof window.game !== 'undefined') {
-                    window.game.handlePlayerInput(action);
-                }
-            };
-            const release = (e) => {
-                e.preventDefault();
-                btn.classList.remove('pressed');
-            };
-            btn.addEventListener('touchstart', press, { passive: false });
-            btn.addEventListener('touchend', release, { passive: false });
-            btn.addEventListener('touchcancel', release, { passive: false });
-        });
+    <div class="rotate-hint" id="rotateHint">
+        <div class="rotate-icon" aria-hidden="true"></div>
+        <p>Obróć telefon, aby zagrać wygodniej</p>
+    </div>
 
-        document.getElementById('touchStartBtn').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (typeof window.game !== 'undefined' && !window.game.isStarted) {
-                window.game.startSinglePlayer('medium');
-            }
-        }, { passive: false });
-
-        document.getElementById('fnRestart3d').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (typeof window.game !== 'undefined' && !window.game.isMultiplayer) {
-                window.game.restart('medium');
-            }
-        }, { passive: false });
-
-        document.getElementById('fnCamera3d').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (typeof window.game !== 'undefined') {
-                window.game.toggleCameraMode();
-            }
-        }, { passive: false });
-
-        document.getElementById('fnMute3d').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (typeof window.game !== 'undefined') {
-                window.game.toggleMute();
-            }
-        }, { passive: false });
-
-        document.getElementById('fnLobby3d').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            // Lobby logic
-        }, { passive: false });
-    </script>
 </body>
 </html>
