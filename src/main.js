@@ -6,7 +6,17 @@ import { LobbyUI } from './LobbyUI.js';
 import { SynthwaveEnvironment } from './Environment.js';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0c0420);
+
+function hexToNum(hex) {
+  return parseInt(hex.replace('#', ''), 16);
+}
+
+// window.__tronTheme jest już ustawione przez skrypt theme-picker w
+// index.html (klasyczny, nie modułowy <script> na samej górze body -
+// wykonuje się PRZED tym, odroczonym, modułem, patrz komentarz w index.html
+// przy orientation-lock, ten sam mechanizm dotyczy motywu).
+const initialTheme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055', bg: '#0c0420' };
+scene.background = new THREE.Color(hexToNum(initialTheme.bg));
 
 function getRenderSize() {
   if (typeof window.__getFieldSize === 'function') {
@@ -44,12 +54,24 @@ scene.add(directionalLight);
 const environment = new SynthwaveEnvironment(scene);
 
 const grid = new Grid(90, 45); // dopasowane do rzeczywistej granicy planszy (±45, patrz Game.js/AI.js)
-grid.setColor(0xff2f9e); // różowa siatka, zgodnie z referencyjną grafiką synthwave
+grid.setColor(hexToNum(initialTheme.p1));
 scene.add(grid.mesh);
 
 const game = new Game(scene, camera);
-game.initPlayer();
-game.initOpponent(new THREE.Vector3(15, 0, 0), 0xff00ff, 'medium');
+game.initPlayer(undefined, hexToNum(initialTheme.p1));
+game.initOpponent(new THREE.Vector3(15, 0, 0), hexToNum(initialTheme.p2), 'medium');
+
+// Zmiana motywu w UI (theme-picker w index.html) działa NA ŻYWO - nie trzeba
+// czekać do kolejnej rundy. Nasłuchujemy zdarzenia wysyłanego przez ten
+// przełącznik i przemalowujemy tło, siatkę oraz istniejące już
+// gracz/przeciwnik/ślady (patrz Game.applyThemeColors).
+window.addEventListener('tron-theme-change', (e) => {
+  const theme = e.detail;
+  if (!theme) return;
+  scene.background = new THREE.Color(hexToNum(theme.bg));
+  grid.setColor(hexToNum(theme.p1));
+  game.applyThemeColors(hexToNum(theme.p1), hexToNum(theme.p2));
+});
 
 // --- Multiplayer ---
 const multiplayerManager = new MultiplayerManager();
