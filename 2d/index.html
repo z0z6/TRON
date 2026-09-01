@@ -482,13 +482,13 @@
         window.addEventListener('game-viewport-resize', resizeCanvas);
 
         let p1, p2, isRunning, isPaused, scores, gameLoop;
+        scores = { p1: 0, p2: 0 }; // Wynik trwa przez kolejne rundy, resetuje go tylko pełny restart.
 
         function initGame() {
             p1 = { x: 10, y: 25, dx: 1, dy: 0, trail: [], color: '#00f3ff' };
             p2 = { x: 40, y: 25, dx: -1, dy: 0, trail: [], color: '#ff0055' };
             isRunning = false;
             isPaused = false;
-            scores = { p1: 0, p2: 0 };
         }
 
         function startRound() {
@@ -595,6 +595,34 @@
         }
 
         // === POPRAWIONE AI - unika kolizji ===
+        // Zlicza liczbę pustych pól osiągalnych z danego punktu (BFS) - to
+        // daje AI proste "wyczucie przestrzeni": zamiast ruchu czysto losowego,
+        // wybiera kierunek, po którym zostaje mu najwięcej miejsca do
+        // manewru, więc unika zamykania się w ślepych zaułkach.
+        function floodFillCount(startX, startY, blocked) {
+            const visited = new Set();
+            const startKey = startX + ',' + startY;
+            visited.add(startKey);
+            const stack = [[startX, startY]];
+            let count = 0;
+            const MAX_CELLS = GRID_SIZE * GRID_SIZE; // twardy limit bezpieczeństwa
+
+            while (stack.length > 0 && count < MAX_CELLS) {
+                const [x, y] = stack.pop();
+                count++;
+
+                const neighbors = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+                for (const [nx, ny] of neighbors) {
+                    if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) continue;
+                    const key = nx + ',' + ny;
+                    if (visited.has(key) || blocked.has(key)) continue;
+                    visited.add(key);
+                    stack.push([nx, ny]);
+                }
+            }
+            return count;
+        }
+
         function aiMove() {
             const directions = [
                 { dx: 0, dy: -1 },
@@ -602,44 +630,53 @@
                 { dx: -1, dy: 0 },
                 { dx: 1, dy: 0 }
             ];
-            
+
+            const blocked = new Set();
+            for (const cell of p1.trail) blocked.add(cell.x + ',' + cell.y);
+            for (const cell of p2.trail) blocked.add(cell.x + ',' + cell.y);
+
             // Filtruj bezpieczne kierunki
             const safeMoves = directions.filter(dir => {
                 // Nie zawracaj
                 if (dir.dx === -p2.dx && dir.dy === -p2.dy) return false;
-                
+
                 const newX = p2.x + dir.dx;
                 const newY = p2.y + dir.dy;
-                
+
                 // Sprawdź ściany
                 if (newX < 0 || newX >= GRID_SIZE || newY < 0 || newY >= GRID_SIZE) {
                     return false;
                 }
-                
-                // Sprawdź własny ślad
-                for (let i = 0; i < p2.trail.length; i++) {
-                    if (p2.trail[i].x === newX && p2.trail[i].y === newY) {
-                        return false;
-                    }
+
+                // Sprawdź ślad obu graczy (własny + gracza 1)
+                if (blocked.has(newX + ',' + newY)) {
+                    return false;
                 }
-                
-                // Sprawdź ślad gracza 1
-                for (let i = 0; i < p1.trail.length; i++) {
-                    if (p1.trail[i].x === newX && p1.trail[i].y === newY) {
-                        return false;
-                    }
-                }
-                
+
                 return true;
             });
-            
-            // Wybierz losowy bezpieczny kierunek
-            if (safeMoves.length > 0) {
-                const move = safeMoves[Math.floor(Math.random() * safeMoves.length)];
-                p2.dx = move.dx;
-                p2.dy = move.dy;
+
+            if (safeMoves.length === 0) return; // brak ruchu - nieunikniona śmierć
+
+            // Spośród bezpiecznych kierunków wybierz ten, który zostawia
+            // najwięcej wolnej, osiągalnej przestrzeni (remisy - losowo).
+            let bestScore = -1;
+            let bestMoves = [];
+            for (const dir of safeMoves) {
+                const nx = p2.x + dir.dx;
+                const ny = p2.y + dir.dy;
+                const score = floodFillCount(nx, ny, blocked);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMoves = [dir];
+                } else if (score === bestScore) {
+                    bestMoves.push(dir);
+                }
             }
-            // Jeśli brak bezpiecznych - kontynuuj (nieunikniona śmierć)
+
+            const move = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            p2.dx = move.dx;
+            p2.dy = move.dy;
         }
 
         setInterval(() => {
