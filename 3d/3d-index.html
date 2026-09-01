@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>TRON Light Cycles 3D</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* Rzeczywisty, POPRAWNIE zorientowany rozmiar pola gry - aktualizowany
+               z JS, żeby proporcjonalne elementy (turn-pad, klawisze funkcyjne)
+               skalowały się względem prawdziwej wysokości/szerokości ekranu w
+               trybie poziomym zamiast surowych vw/vh, które ignorują transform. */
+            --vp-w: 100vw;
+            --vp-h: 100vh;
+        }
+
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000011; }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* === WYMUSZONA ORIENTACJA POZIOMA (Android/mobile) ===
+           Obraca całą stronę o 90° przez CSS, niezależnie od systemowego
+           ustawienia auto-rotacji Androida. Canvas Three.js jest dzieckiem
+           body i jest ustawiany na SPRZĘŻONE (zamienione) wymiary przez
+           renderer.setSize - patrz window.__getRenderSize w skrypcie poniżej. */
+        html.force-landscape body {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            min-height: 0;
+            transform: translate(-50%, -50%) rotate(90deg);
+            transform-origin: center center;
+            overflow: hidden;
+        }
+
+        #scoreHud {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #aef1ff;
+            text-align: right;
+            pointer-events: none;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
+        }
+
+        #scoreHud .score { font-size: 32px; font-weight: bold; }
+        #scoreHud .combo {
+            font-size: 16px;
+            color: #ffcc00;
+            text-shadow: 0 0 8px rgba(255, 204, 0, 0.7);
+            min-height: 20px;
+        }
+
+        #effectsHud {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-end;
+        }
+
+        #effectsHud .effect {
+            font-family: monospace;
+            font-size: 13px;
+            color: #0f0;
+            background: rgba(0, 20, 10, 0.7);
+            border: 1px solid rgba(0, 255, 0, 0.5);
+            border-radius: 4px;
+            padding: 3px 10px;
+        }
+
+        #toastHud {
+            position: fixed;
+            top: 180px;
+            right: 20px;
+            z-index: 10;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 15px;
+            color: #ffee00;
+            text-shadow: 0 0 10px rgba(255, 238, 0, 0.8);
+            pointer-events: none;
+            text-align: right;
+            transition: opacity 0.15s linear;
+        }
+
+        #achievementToast {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: linear-gradient(135deg, rgba(20, 10, 0, 0.95), rgba(40, 25, 0, 0.95));
+            border: 1px solid rgba(255, 200, 0, 0.7);
+            border-radius: 8px;
+            padding: 12px 20px;
+            box-shadow: 0 0 25px rgba(255, 200, 0, 0.4);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #ffe9b0;
+            pointer-events: none;
+            opacity: 0;
+            transform: translate(-50%, -16px);
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+
+        #achievementToast.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        #achievementToast .icon { font-size: 28px; }
+        #achievementToast .name { font-weight: bold; font-size: 15px; color: #ffd24a; }
+        #achievementToast .desc { font-size: 13px; color: #d8c79a; }
+
+        /* === KOMUNIKAT O OBROCIE EKRANU === */
+        .rotate-message {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at center, rgba(12, 6, 26, 0.97) 0%, rgba(2, 2, 8, 0.99) 100%);
+            opacity: 1;
+            transition: opacity 0.32s ease;
+        }
+
+        .rotate-message.hide { opacity: 0; }
+
+        @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+            .rotate-message { display: flex; }
+        }
+
+        .rotate-message-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+            padding: 0 32px;
+        }
+
+        .rotate-icon {
+            width: 40px;
+            height: 68px;
+            border: 3px solid #00f3ff;
+            border-radius: 9px;
+            position: relative;
+            background: rgba(0, 243, 255, 0.06);
+            box-shadow: 0 0 16px rgba(0, 243, 255, 0.65), 0 0 30px rgba(255, 0, 255, 0.25), inset 0 0 10px rgba(0, 243, 255, 0.25);
+            animation: rotate-phone-hint 1.6s ease-in-out infinite;
+        }
+
+        .rotate-icon::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: 7px;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 3px;
+            border-radius: 2px;
+            background: #00f3ff;
+            box-shadow: 0 0 6px rgba(0, 243, 255, 0.8);
+        }
+
+        @keyframes rotate-phone-hint {
+            0%, 12%  { transform: rotate(0deg); }
+            45%, 70% { transform: rotate(-90deg); }
+            100%     { transform: rotate(-90deg); }
+        }
+
+        .rotate-text {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: clamp(0.95rem, 4vw, 1.15rem);
+            font-weight: bold;
+            letter-spacing: 2.5px;
+            text-align: center;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #00f3ff, #ff00ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            filter: drop-shadow(0 0 8px rgba(0, 243, 255, 0.45)) drop-shadow(0 0 8px rgba(255, 0, 255, 0.45));
+            animation: rotate-text-pulse 1.6s ease-in-out infinite;
+        }
+
+        @keyframes rotate-text-pulse {
+            0%, 100% { opacity: 0.75; }
+            50%      { opacity: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .rotate-icon, .rotate-text { animation: none; }
+            .rotate-icon { transform: rotate(-90deg); }
+        }
+
+        /* === TOUCH CONTROLS === */
+        .touch-controls {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 30;
+            pointer-events: none;
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .touch-controls { display: block; }
+        }
+
+        .turn-pad {
+            position: absolute;
+            right: max(25px, env(safe-area-inset-right, 25px));
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .turn-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: min(76px, calc(var(--vp-h) * 0.19));
+            height: min(76px, calc(var(--vp-h) * 0.19));
+            background: rgba(0, 243, 255, 0.15);
+            border: 3px solid rgba(0, 243, 255, 0.6);
+            border-radius: 14px;
+            color: #00f3ff;
+            font-size: 2rem;
+            touch-action: none;
+            user-select: none;
+            transition: all 0.1s ease;
+        }
+
+        .turn-btn:active, .turn-btn.pressed {
+            background: rgba(0, 243, 255, 0.5);
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.8);
+        }
+
+        .fn-controls-3d {
+            position: absolute;
+            left: max(25px, env(safe-area-inset-left, 25px));
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: auto;
+        }
+
+        .fn-btn-3d {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            width: min(70px, calc(var(--vp-h) * 0.15));
+            height: min(50px, calc(var(--vp-h) * 0.11));
+            background: rgba(255, 0, 255, 0.15);
+            border: 2px solid rgba(255, 0, 255, 0.6);
+            border-radius: 10px;
+            color: #ff77ff;
+            touch-action: none;
+            user-select: none;
+            transition: all 0.1s ease;
+        }
+
+        .fn-btn-3d:active, .fn-btn-3d.pressed {
+            background: rgba(255, 0, 255, 0.5);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+        }
+
+        .fn-btn-3d .fn-icon-3d { font-size: 1.2rem; }
+        .fn-btn-3d .fn-label-3d { font-size: 0.6rem; font-weight: bold; letter-spacing: 1px; }
+
+        .touch-start-btn {
+            display: none;
+            position: fixed;
+            left: 50%;
+            bottom: max(120px, env(safe-area-inset-bottom, 120px));
+            transform: translateX(-50%);
+            z-index: 25;
+            padding: clamp(14px, 4vw, 18px) clamp(36px, 10vw, 50px);
+            background: rgba(0, 243, 255, 0.15);
+            border: 3px solid #00f3ff;
+            border-radius: 40px;
+            color: #00f3ff;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-weight: bold;
+            font-size: clamp(1rem, 3vw, 1.2rem);
+            letter-spacing: 3px;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.5);
+            touch-action: none;
+            user-select: none;
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .touch-start-btn { display: block; }
+        }
+    </style>
+  <script type="module" crossorigin src="/TRON/3d/assets/index-Cl0pjRZJ.js"></script>
+</head>
+<body>
+    <div class="rotate-message" id="rotateMessage" aria-hidden="true">
+        <div class="rotate-message-inner">
+            <div class="rotate-icon"></div>
+            <p class="rotate-text">Obróć telefon w poziom</p>
+        </div>
+    </div>
+
+    <script>
+        // === WYMUSZENIE ORIENTACJI POZIOMEJ ===
+        // Klasyczny (nie module) skrypt - wykonuje się natychmiast, PRZED
+        // odroczonym skryptem modułowym z Three.js poniżej, więc
+        // window.__getRenderSize jest już dostępne, gdy main.js tworzy
+        // kamerę/renderer. Bezwarunkowo wymusza landscape po ukryciu
+        // komunikatu, niezależnie od systemowego ustawienia auto-rotacji.
+        (function () {
+            function isTouchDevice() {
+                return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+            }
+
+            function computeSize() {
+                var w = window.innerWidth, h = window.innerHeight;
+                var portrait = h > w;
+                var forced = isTouchDevice() && portrait;
+                return { forced: forced, width: forced ? h : w, height: forced ? w : h };
+            }
+
+            window.__getRenderSize = computeSize;
+
+            document.documentElement.style.setProperty('--vp-w', window.innerWidth + 'px');
+            document.documentElement.style.setProperty('--vp-h', window.innerHeight + 'px');
+
+            function applyLayout() {
+                var s = computeSize();
+                var root = document.documentElement;
+                if (s.forced) {
+                    root.classList.add('force-landscape');
+                    document.body.style.width = s.width + 'px';
+                    document.body.style.height = s.height + 'px';
+                } else {
+                    root.classList.remove('force-landscape');
+                    document.body.style.width = '';
+                    document.body.style.height = '';
+                }
+                root.style.setProperty('--vp-w', s.width + 'px');
+                root.style.setProperty('--vp-h', s.height + 'px');
+                window.dispatchEvent(new Event('game-viewport-resize'));
+            }
+
+            function finishHint() {
+                var hint = document.getElementById('rotateMessage');
+                if (hint) {
+                    hint.classList.add('hide');
+                    window.setTimeout(function () {
+                        hint.style.display = 'none';
+                        applyLayout();
+                    }, 320);
+                } else {
+                    applyLayout();
+                }
+            }
+
+            if (isTouchDevice()) {
+                window.setTimeout(finishHint, 1400);
+            }
+
+            window.addEventListener('resize', applyLayout);
+            window.addEventListener('orientationchange', applyLayout);
+        })();
+    </script>
+
+    <div id="scoreHud">
+        <div class="score" id="scoreValue">0</div>
+        <div class="combo" id="comboValue"></div>
+    </div>
+    <div id="effectsHud"></div>
+    <div id="toastHud"></div>
+    <div id="achievementToast">
+        <span class="icon" id="achievementIcon"></span>
+        <div>
+            <div class="name" id="achievementName"></div>
+            <div class="desc" id="achievementDesc"></div>
+        </div>
+    </div>
+
+    <div class="touch-controls" aria-hidden="true">
+        <div class="turn-pad" id="turnPad">
+            <button type="button" class="turn-btn" data-turn="left">◀</button>
+            <button type="button" class="turn-btn" data-turn="right">▶</button>
+        </div>
+        <div class="fn-controls-3d">
+            <button type="button" class="fn-btn-3d" id="fnRestart3d"><span class="fn-icon-3d">↻</span><span class="fn-label-3d">RESTART</span></button>
+            <button type="button" class="fn-btn-3d" id="fnCamera3d"><span class="fn-icon-3d"></span><span class="fn-label-3d">KAMERA</span></button>
+            <button type="button" class="fn-btn-3d" id="fnMute3d"><span class="fn-icon-3d">🔇</span><span class="fn-label-3d">WYCISZ</span></button>
+            <button type="button" class="fn-btn-3d" id="fnLobby3d"><span class="fn-icon-3d">🌐</span><span class="fn-label-3d">SIEĆ</span></button>
+        </div>
+    </div>
+
+    <button type="button" class="touch-start-btn" id="touchStartBtn">URUCHOM CYKL</button>
+
+    <script>
+        // Touch controls dla 3D
+        document.querySelectorAll('.turn-btn').forEach((btn) => {
+            const action = btn.dataset.turn === 'left' ? 'turnLeft' : 'turnRight';
+            const press = (e) => {
+                e.preventDefault();
+                btn.classList.add('pressed');
+                if (typeof window.game !== 'undefined') {
+                    window.game.handlePlayerInput(action);
+                }
+            };
+            const release = (e) => {
+                e.preventDefault();
+                btn.classList.remove('pressed');
+            };
+            btn.addEventListener('touchstart', press, { passive: false });
+            btn.addEventListener('touchend', release, { passive: false });
+            btn.addEventListener('touchcancel', release, { passive: false });
+        });
+
+        document.getElementById('touchStartBtn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined' && !window.game.isStarted) {
+                window.game.startSinglePlayer('medium');
+            }
+        }, { passive: false });
+
+        document.getElementById('fnRestart3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined' && !window.game.isMultiplayer) {
+                window.game.restart('medium');
+            }
+        }, { passive: false });
+
+        document.getElementById('fnCamera3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined') {
+                window.game.toggleCameraMode();
+            }
+        }, { passive: false });
+
+        document.getElementById('fnMute3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (typeof window.game !== 'undefined') {
+                window.game.toggleMute();
+            }
+        }, { passive: false });
+
+        document.getElementById('fnLobby3d').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            // Lobby logic
+        }, { passive: false });
+    </script>
+</body>
+</html>
