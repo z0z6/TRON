@@ -8,6 +8,23 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
+            /* === MOTYW KOLORYSTYCZNY ===
+               Domyślne wartości = TRON CLASSIC (dokładnie to, co było na
+               sztywno wcześniej - więc bez wybranego motywu wygląd się nie
+               zmienia). JS (theme-picker) nadpisuje je przy starcie/zmianie
+               motywu. R/G/B osobno są potrzebne, bo CSS rgba() przyjmuje
+               liczby, nie może przyjąć całego koloru przez var() jako jeden
+               parametr. */
+            --theme-p1: var(--theme-p1);
+            --theme-p1-r: 0;
+            --theme-p1-g: 243;
+            --theme-p1-b: 255;
+            --theme-p2: var(--theme-p2);
+            --theme-p2-r: 255;
+            --theme-p2-g: 0;
+            --theme-p2-b: 85;
+            --theme-bg: #050811;
+
             /* Rzeczywisty, POPRAWNIE zorientowany rozmiar pola gry - aktualizowany
                z JS. Dzięki temu elementy proporcjonalne (D-Pad, klawisze funkcyjne)
                skalują się względem prawdziwej wysokości/szerokości ekranu w trybie
@@ -35,7 +52,7 @@
         html, body {
             width: 100%;
             height: 100%;
-            background-color: #050811;
+            background-color: var(--theme-bg);
             color: #e0f7fc;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             overflow: hidden;
@@ -52,9 +69,9 @@
         .canvas-wrapper {
             position: fixed;
             inset: 0;
-            background-color: #000;
-            border: 4px solid #00f3ff;
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.3);
+            background-color: var(--theme-bg);
+            border: 4px solid var(--theme-p1);
+            box-shadow: 0 0 30px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5), inset 0 0 20px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.3);
         }
 
         /* Marginesy na sterowanie dotykowe zwężają pole gry TYLKO tam, gdzie
@@ -110,8 +127,8 @@
 
         #overlay-title {
             font-size: clamp(2rem, 6vw, 3rem);
-            color: #00f3ff;
-            text-shadow: 0 0 20px #00f3ff, 0 0 40px #00f3ff;
+            color: var(--theme-p1);
+            text-shadow: 0 0 20px var(--theme-p1), 0 0 40px var(--theme-p1);
             letter-spacing: 4px;
         }
 
@@ -124,21 +141,95 @@
 
         .btn-start {
             padding: clamp(12px, 4vw, 16px) clamp(32px, 8vw, 48px);
-            background: rgba(0, 243, 255, 0.15);
-            border: 3px solid #00f3ff;
+            background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.15);
+            border: 3px solid var(--theme-p1);
             border-radius: 40px;
-            color: #00f3ff;
+            color: var(--theme-p1);
             font-size: clamp(1rem, 3vw, 1.3rem);
             font-weight: bold;
             letter-spacing: 3px;
             cursor: pointer;
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.5);
+            box-shadow: 0 0 30px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
             transition: all 0.2s ease;
         }
 
         .btn-start:hover {
-            background: rgba(0, 243, 255, 0.3);
-            box-shadow: 0 0 40px rgba(0, 243, 255, 0.7);
+            background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.3);
+            box-shadow: 0 0 40px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.7);
+        }
+
+        /* === PRZEŁĄCZNIK MOTYWU KOLORYSTYCZNEGO === */
+        .theme-picker {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 40;
+        }
+
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(5, 8, 17, 0.7);
+            border: 2px solid var(--theme-p1);
+            color: var(--theme-p1);
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 12px currentColor;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .theme-menu {
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            position: absolute;
+            top: 48px;
+            left: 0;
+            background: rgba(5, 8, 17, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 8px;
+            min-width: 170px;
+        }
+
+        .theme-menu.open { display: flex; }
+
+        .theme-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: transparent;
+            border: none;
+            color: #e0f7fc;
+            font-family: inherit;
+            font-size: 0.72rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            touch-action: manipulation;
+        }
+
+        .theme-option:hover, .theme-option:active {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .theme-option.active {
+            outline: 1px solid rgba(255, 255, 255, 0.35);
+        }
+
+        .theme-swatch {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
         }
 
         /* === SCOREBOARD === */
@@ -158,8 +249,8 @@
             text-shadow: 0 0 10px currentColor;
         }
 
-        .p1-score { color: #00f3ff; }
-        .p2-score { color: #ff0055; }
+        .p1-score { color: var(--theme-p1); }
+        .p2-score { color: var(--theme-p2); }
 
         /* === KOMUNIKAT O OBROCIE EKRANU === */
         .rotate-message {
@@ -193,11 +284,11 @@
         .rotate-icon {
             width: 40px;
             height: 68px;
-            border: 3px solid #00f3ff;
+            border: 3px solid var(--theme-p1);
             border-radius: 9px;
             position: relative;
-            background: rgba(0, 243, 255, 0.06);
-            box-shadow: 0 0 16px rgba(0, 243, 255, 0.65), 0 0 30px rgba(255, 0, 255, 0.25), inset 0 0 10px rgba(0, 243, 255, 0.25);
+            background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.06);
+            box-shadow: 0 0 16px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.65), 0 0 30px rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.25), inset 0 0 10px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.25);
             animation: rotate-phone-hint 1.6s ease-in-out infinite;
         }
 
@@ -210,8 +301,8 @@
             width: 12px;
             height: 3px;
             border-radius: 2px;
-            background: #00f3ff;
-            box-shadow: 0 0 6px rgba(0, 243, 255, 0.8);
+            background: var(--theme-p1);
+            box-shadow: 0 0 6px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.8);
         }
 
         @keyframes rotate-phone-hint {
@@ -227,11 +318,11 @@
             letter-spacing: 2.5px;
             text-align: center;
             text-transform: uppercase;
-            background: linear-gradient(90deg, #00f3ff, #ff00ff);
+            background: linear-gradient(90deg, var(--theme-p1), var(--theme-p2));
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
-            filter: drop-shadow(0 0 8px rgba(0, 243, 255, 0.45)) drop-shadow(0 0 8px rgba(255, 0, 255, 0.45));
+            filter: drop-shadow(0 0 8px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.45)) drop-shadow(0 0 8px rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.45));
             animation: rotate-text-pulse 1.6s ease-in-out infinite;
         }
 
@@ -294,10 +385,10 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(0, 243, 255, 0.15);
-            border: 2px solid rgba(0, 243, 255, 0.6);
+            background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.15);
+            border: 2px solid rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.6);
             border-radius: 10px;
-            color: #00f3ff;
+            color: var(--theme-p1);
             font-size: clamp(1.5rem, 4.5vw, 2.1rem);
             touch-action: none;
             user-select: none;
@@ -305,8 +396,8 @@
         }
 
         .dpad-btn:active, .dpad-btn.pressed {
-            background: rgba(0, 243, 255, 0.5);
-            box-shadow: 0 0 20px rgba(0, 243, 255, 0.8);
+            background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
+            box-shadow: 0 0 20px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.8);
         }
 
         .dpad-up { grid-column: 2; grid-row: 1; }
@@ -330,8 +421,8 @@
             gap: 4px;
             width: var(--fn-btn-w);
             height: var(--fn-btn-h);
-            background: rgba(255, 0, 255, 0.15);
-            border: 2px solid rgba(255, 0, 255, 0.6);
+            background: rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.15);
+            border: 2px solid rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.6);
             border-radius: 10px;
             color: #ff77ff;
             touch-action: none;
@@ -340,8 +431,8 @@
         }
 
         .fn-btn:active, .fn-btn.pressed {
-            background: rgba(255, 0, 255, 0.5);
-            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+            background: rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.5);
+            box-shadow: 0 0 20px rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.8);
         }
 
         .fn-icon { font-size: 0.98rem; }
@@ -349,6 +440,122 @@
     </style>
 </head>
 <body>
+    <script>
+        // === MOTYW KOLORYSTYCZNY ===
+        // Musi wystartować jak najwcześniej (przed resztą gry) - inne skrypty
+        // (initGame, draw) czytają window.__tronTheme przy pierwszym użyciu.
+        (function () {
+            const THEMES = {
+                classic:   { name: 'TRON CLASSIC', p1: '#00f3ff', p2: '#ff0055', bg: '#050811' },
+                synthwave: { name: 'SYNTHWAVE',    p1: '#ff2f9e', p2: '#ffd23f', bg: '#0c0420' },
+                matrix:    { name: 'MATRIX',       p1: '#39ff14', p2: '#0d7a3f', bg: '#000f05' },
+                amber:     { name: 'AMBER',        p1: '#ff8c00', p2: '#ff2e2e', bg: '#1a0800' },
+                glacier:   { name: 'GLACIER',      p1: '#4fd8ff', p2: '#ffffff', bg: '#001522' }
+            };
+
+            function hexToRgb(hex) {
+                const h = hex.replace('#', '');
+                return {
+                    r: parseInt(h.substring(0, 2), 16),
+                    g: parseInt(h.substring(2, 4), 16),
+                    b: parseInt(h.substring(4, 6), 16)
+                };
+            }
+
+            function hexToRgba(hex, alpha) {
+                const c = hexToRgb(hex);
+                return `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`;
+            }
+            window.__tronHexToRgba = hexToRgba;
+            window.__TRON_THEMES = THEMES;
+
+            function applyTheme(key) {
+                const theme = THEMES[key] || THEMES.classic;
+                const root = document.documentElement;
+                const p1 = hexToRgb(theme.p1);
+                const p2 = hexToRgb(theme.p2);
+
+                root.style.setProperty('--theme-p1', theme.p1);
+                root.style.setProperty('--theme-p1-r', p1.r);
+                root.style.setProperty('--theme-p1-g', p1.g);
+                root.style.setProperty('--theme-p1-b', p1.b);
+                root.style.setProperty('--theme-p2', theme.p2);
+                root.style.setProperty('--theme-p2-r', p2.r);
+                root.style.setProperty('--theme-p2-g', p2.g);
+                root.style.setProperty('--theme-p2-b', p2.b);
+                root.style.setProperty('--theme-bg', theme.bg);
+
+                document.querySelectorAll('.theme-option').forEach((btn) => {
+                    btn.classList.toggle('active', btn.dataset.theme === key);
+                });
+
+                window.__tronTheme = theme;
+                window.__tronThemeKey = key;
+                try { localStorage.setItem('tron-theme', key); } catch (e) {}
+                window.dispatchEvent(new CustomEvent('tron-theme-change', { detail: theme }));
+            }
+            window.__applyTronTheme = applyTheme;
+
+            let savedKey = 'classic';
+            try { savedKey = localStorage.getItem('tron-theme') || 'classic'; } catch (e) {}
+            if (!THEMES[savedKey]) savedKey = 'classic';
+            applyTheme(savedKey);
+
+            // Menu i przyciski jeszcze nie istnieją w DOM w tym momencie
+            // (skrypt jest na samej górze body) - podłączamy listenery po
+            // wyrenderowaniu reszty markupu.
+            document.addEventListener('DOMContentLoaded', function () {
+                const toggle = document.getElementById('themeToggle');
+                const menu = document.getElementById('themeMenu');
+                if (!toggle || !menu) return;
+
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    menu.classList.toggle('open');
+                });
+                menu.querySelectorAll('.theme-option').forEach((btn) => {
+                    btn.addEventListener('click', function () {
+                        applyTheme(btn.dataset.theme);
+                        menu.classList.remove('open');
+                    });
+                });
+                document.addEventListener('click', function () {
+                    menu.classList.remove('open');
+                });
+
+                document.querySelectorAll('.theme-option').forEach((btn) => {
+                    btn.classList.toggle('active', btn.dataset.theme === window.__tronThemeKey);
+                });
+            });
+        })();
+    </script>
+
+    <div class="theme-picker" id="themePicker">
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="Zmień motyw kolorystyczny">🎨</button>
+        <div class="theme-menu" id="themeMenu">
+            <button type="button" class="theme-option" data-theme="classic">
+                <span class="theme-swatch" style="background: linear-gradient(90deg, #00f3ff, #ff0055);"></span>
+                TRON CLASSIC
+            </button>
+            <button type="button" class="theme-option" data-theme="synthwave">
+                <span class="theme-swatch" style="background: linear-gradient(90deg, #ff2f9e, #ffd23f);"></span>
+                SYNTHWAVE
+            </button>
+            <button type="button" class="theme-option" data-theme="matrix">
+                <span class="theme-swatch" style="background: linear-gradient(90deg, #39ff14, #0d7a3f);"></span>
+                MATRIX
+            </button>
+            <button type="button" class="theme-option" data-theme="amber">
+                <span class="theme-swatch" style="background: linear-gradient(90deg, #ff8c00, #ff2e2e);"></span>
+                AMBER
+            </button>
+            <button type="button" class="theme-option" data-theme="glacier">
+                <span class="theme-swatch" style="background: linear-gradient(90deg, #4fd8ff, #ffffff);"></span>
+                GLACIER
+            </button>
+        </div>
+    </div>
+
     <div class="rotate-message" id="rotateMessage" aria-hidden="true">
         <div class="rotate-message-inner">
             <div class="rotate-icon"></div>
@@ -491,8 +698,9 @@
         scores = { p1: 0, p2: 0 }; // Wynik trwa przez kolejne rundy, resetuje go tylko pełny restart.
 
         function initGame() {
-            p1 = { x: 10, y: 25, dx: 1, dy: 0, trail: [], color: '#00f3ff' };
-            p2 = { x: 40, y: 25, dx: -1, dy: 0, trail: [], color: '#ff0055' };
+            const theme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055' };
+            p1 = { x: 10, y: 25, dx: 1, dy: 0, trail: [], color: theme.p1 };
+            p2 = { x: 40, y: 25, dx: -1, dy: 0, trail: [], color: theme.p2 };
             isRunning = false;
             isPaused = false;
         }
@@ -553,19 +761,21 @@
             p1ScoreEl.textContent = scores.p1;
             p2ScoreEl.textContent = scores.p2;
             
+            const theme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055' };
             overlayTitle.textContent = "KONIEC RUNDY";
-            overlayTitle.style.color = "#ff0055";
-            overlayMsg.innerHTML = `Wynik: <span style="color:#00f3ff">${scores.p1}</span> - <span style="color:#ff0055">${scores.p2}</span>`;
+            overlayTitle.style.color = theme.p2;
+            overlayMsg.innerHTML = `Wynik: <span style="color:${theme.p1}">${scores.p1}</span> - <span style="color:${theme.p2}">${scores.p2}</span>`;
             startBtn.textContent = "NASTĘPNA RUNDA";
             overlay.classList.remove('hidden');
         }
 
         function draw() {
-            ctx.fillStyle = '#000';
+            const theme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055', bg: '#050811' };
+            ctx.fillStyle = theme.bg || '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Siatka
-            ctx.strokeStyle = 'rgba(0, 243, 255, 0.08)';
+            ctx.strokeStyle = window.__tronHexToRgba ? window.__tronHexToRgba(theme.p1, 0.08) : 'rgba(0, 243, 255, 0.08)';
             ctx.lineWidth = 1;
             for (let i = 0; i <= GRID_SIZE; i++) {
                 ctx.beginPath();
