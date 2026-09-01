@@ -21,10 +21,10 @@
                dla każdej strony (względem rozmiaru elementu, który tam stoi),
                więc D-Pad może być większy niż klawisze funkcyjne bez
                marnowania miejsca po stronie, gdzie stoi coś mniejszego. */
-            --dpad-size: clamp(96px, calc(var(--vp-h) * 0.30), 132px);
+            --dpad-size: clamp(120px, calc(var(--vp-h) * 0.38), 165px);
             --side-margin-right: calc(var(--dpad-size) + 18px);
-            --fn-btn-w: clamp(48px, calc(var(--vp-h) * 0.12), 60px);
-            --fn-btn-h: clamp(34px, calc(var(--vp-h) * 0.085), 44px);
+            --fn-btn-w: clamp(58px, calc(var(--vp-h) * 0.15), 74px);
+            --fn-btn-h: clamp(42px, calc(var(--vp-h) * 0.105), 54px);
             --side-margin-left: calc(var(--fn-btn-w) + 16px);
         }
 
@@ -283,7 +283,7 @@
             border: 2px solid rgba(0, 243, 255, 0.6);
             border-radius: 10px;
             color: #00f3ff;
-            font-size: clamp(1.3rem, 4vw, 1.8rem);
+            font-size: clamp(1.5rem, 4.5vw, 2.1rem);
             touch-action: none;
             user-select: none;
             transition: all 0.1s ease;
@@ -327,8 +327,8 @@
             box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
         }
 
-        .fn-btn .fn-icon { font-size: 1.05rem; }
-        .fn-btn .fn-label { font-size: 0.52rem; font-weight: bold; letter-spacing: 0.5px; }
+        .fn-btn .fn-icon { font-size: 1.2rem; }
+        .fn-btn .fn-label { font-size: 0.6rem; font-weight: bold; letter-spacing: 0.5px; }
 
         .touch-start-btn {
             display: none;
