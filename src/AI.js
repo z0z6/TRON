@@ -33,6 +33,13 @@ export class AI {
     console.log('AI mesh created and added to scene');
   }
 
+  setColor(color) {
+    this.color = color;
+    this.mesh.material.color.set(color);
+    this.mesh.material.emissive.set(color);
+    if (this.trail) this.trail.setColor(color);
+  }
+
   getPosition() {
     return this.position.clone();
   }
