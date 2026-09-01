@@ -6,9 +6,7 @@ import { LobbyUI } from './LobbyUI.js';
 import { SynthwaveEnvironment } from './Environment.js';
 
 const scene = new THREE.Scene();
-// Tło areny to teraz osobny, pełnoekranowy przebieg renderowania
-// (SynthwaveEnvironment - shader tunelu) zamiast scene.background - patrz
-// animate() niżej.
+scene.background = new THREE.Color(0x0c0420);
 
 function getRenderSize() {
   if (typeof window.__getFieldSize === 'function') {
@@ -31,12 +29,6 @@ camera.lookAt(0, 0, 0);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(initialSize.width, initialSize.height);
 renderer.setPixelRatio(window.devicePixelRatio);
-// autoClear=false: renderujemy w dwóch przebiegach co klatkę (tło shaderowe,
-// potem właściwa scena) - patrz animate() niżej, gdzie ręcznie zarządzamy
-// czyszczeniem bufora koloru/głębi między przebiegami. Z domyślnym
-// autoClear=true drugi przebieg (renderer.render(scene, camera)) czyściłby
-// bufor koloru i kasował dopiero co narysowane tło.
-renderer.autoClear = false;
 // Renderuje do #gameCanvasWrap (zwężonego o marginesy na sterowanie dotykowe
 // - patrz orientation-lock w index.html), a nie bezpośrednio do <body>, żeby
 // motocykl nigdy nie jeździł "pod" D-Padem/klawiszami funkcyjnymi.
@@ -50,7 +42,6 @@ directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
 const environment = new SynthwaveEnvironment(scene);
-environment.setSize(initialSize.width, initialSize.height);
 
 const grid = new Grid(90, 45); // dopasowane do rzeczywistej granicy planszy (±45, patrz Game.js/AI.js)
 grid.setColor(0xff2f9e); // różowa siatka, zgodnie z referencyjną grafiką synthwave
@@ -230,14 +221,10 @@ function animate(currentTime) {
   
   const timeInSeconds = currentTime * 0.001;
   grid.update(timeInSeconds);
-  environment.update(timeInSeconds);
   
   game.update(deltaTime);
   updateScoreHud();
   
-  renderer.clear();
-  environment.renderBackground(renderer);
-  renderer.clearDepth();
   renderer.render(scene, camera);
 }
 
@@ -248,7 +235,6 @@ function applyViewportSize() {
   camera.aspect = size.width / size.height;
   camera.updateProjectionMatrix();
   renderer.setSize(size.width, size.height);
-  environment.setSize(size.width, size.height);
 }
 
 window.addEventListener('resize', applyViewportSize);
