@@ -537,6 +537,23 @@ export class Game {
     this.audioManager.setMuted(currentVolume > 0);
   }
 
+  // Aktualizuje kolory JUŻ ISTNIEJĄCYCH obiektów (gracz/przeciwnik/ślady) na
+  // podstawie aktualnego motywu - bez przebudowywania mesh'y. Bezpieczne do
+  // wywołania w dowolnym momencie (np. zaraz po zmianie motywu w UI, w
+  // trakcie trwającej rundy) - obowiązuje natychmiast, nie dopiero od
+  // kolejnej rundy.
+  applyThemeColors(p1Hex, p2Hex) {
+    if (this.player && this.player.mesh) {
+      this.player.mesh.material.color.set(p1Hex);
+      this.player.mesh.material.emissive.set(p1Hex);
+    }
+    if (this.playerTrailMesh) this.playerTrailMesh.setColor(p1Hex);
+
+    if (this.opponent && typeof this.opponent.setColor === 'function') {
+      this.opponent.setColor(p2Hex);
+    }
+  }
+
   dispose() {
     if (this._autoRestartTimer) {
       clearTimeout(this._autoRestartTimer);
