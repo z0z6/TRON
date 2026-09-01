@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>TRON Light Cycles 2D</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* Rzeczywisty, POPRAWNIE zorientowany rozmiar pola gry - aktualizowany
+               z JS. Dzięki temu elementy proporcjonalne (D-Pad, klawisze funkcyjne)
+               skalują się względem prawdziwej wysokości/szerokości ekranu w trybie
+               poziomym, zamiast surowych jednostek vw/vh, które ZAWSZE odnoszą się
+               do fizycznego (nieobróconego) viewportu i ignorują transform poniżej. */
+            --vp-w: 100vw;
+            --vp-h: 100vh;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: #050811;
+            color: #e0f7fc;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+        }
+
+        .game-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .canvas-wrapper {
+            position: fixed;
+            inset: 0;
+            background-color: #000;
+            border: 4px solid #00f3ff;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.3);
+        }
+
+        #tronCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* === WYMUSZONA ORIENTACJA POZIOMA (Android/mobile) ===
+           Obraca całą stronę o 90° przez CSS, niezależnie od systemowego
+           ustawienia auto-rotacji Androida. .canvas-wrapper (position:fixed;
+           inset:0) automatycznie "dziedziczy" już-obrócony układ, bo transform
+           na body tworzy dla niego nowy containing block - stąd NIE wolno mu
+           używać jednostek vw/vh (te zawsze ignorują transform rodzica). */
+        html.force-landscape body {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            min-height: 0;
+            transform: translate(-50%, -50%) rotate(90deg);
+            transform-origin: center center;
+            overflow: hidden;
+        }
+
+        .overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(5, 8, 17, 0.92);
+            gap: 20px;
+            z-index: 20;
+            transition: opacity 0.3s ease;
+        }
+
+        .overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #overlay-title {
+            font-size: clamp(2rem, 6vw, 3rem);
+            color: #00f3ff;
+            text-shadow: 0 0 20px #00f3ff, 0 0 40px #00f3ff;
+            letter-spacing: 4px;
+        }
+
+        #overlay-msg {
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            color: #e0f7fc;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        .btn-start {
+            padding: clamp(12px, 4vw, 16px) clamp(32px, 8vw, 48px);
+            background: rgba(0, 243, 255, 0.15);
+            border: 3px solid #00f3ff;
+            border-radius: 40px;
+            color: #00f3ff;
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            font-weight: bold;
+            letter-spacing: 3px;
+            cursor: pointer;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.5);
+            transition: all 0.2s ease;
+        }
+
+        .btn-start:hover {
+            background: rgba(0, 243, 255, 0.3);
+            box-shadow: 0 0 40px rgba(0, 243, 255, 0.7);
+        }
+
+        /* === SCOREBOARD === */
+        .scoreboard {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 40px;
+            z-index: 15;
+            font-size: clamp(1.2rem, 3.5vw, 1.5rem);
+            font-weight: bold;
+        }
+
+        .score {
+            text-shadow: 0 0 10px currentColor;
+        }
+
+        .p1-score { color: #00f3ff; }
+        .p2-score { color: #ff0055; }
+
+        /* === KOMUNIKAT O OBROCIE EKRANU === */
+        .rotate-message {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at center, rgba(12, 6, 26, 0.97) 0%, rgba(2, 2, 8, 0.99) 100%);
+            opacity: 1;
+            transition: opacity 0.32s ease;
+        }
+
+        .rotate-message.hide { opacity: 0; }
+
+        /* CSS pokazuje komunikat NATYCHMIAST (zanim jeszcze zdąży wystartować
+           JS), więc nie ma ryzyka mignięcia niezasłoniętej gry w pionie. */
+        @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+            .rotate-message { display: flex; }
+        }
+
+        .rotate-message-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+            padding: 0 32px;
+        }
+
+        .rotate-icon {
+            width: 40px;
+            height: 68px;
+            border: 3px solid #00f3ff;
+            border-radius: 9px;
+            position: relative;
+            background: rgba(0, 243, 255, 0.06);
+            box-shadow: 0 0 16px rgba(0, 243, 255, 0.65), 0 0 30px rgba(255, 0, 255, 0.25), inset 0 0 10px rgba(0, 243, 255, 0.25);
+            animation: rotate-phone-hint 1.6s ease-in-out infinite;
+        }
+
+        .rotate-icon::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: 7px;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 3px;
+            border-radius: 2px;
+            background: #00f3ff;
+            box-shadow: 0 0 6px rgba(0, 243, 255, 0.8);
+        }
+
+        @keyframes rotate-phone-hint {
+            0%, 12%  { transform: rotate(0deg); }
+            45%, 70% { transform: rotate(-90deg); }
+            100%     { transform: rotate(-90deg); }
+        }
+
+        .rotate-text {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: clamp(0.95rem, 4vw, 1.15rem);
+            font-weight: bold;
+            letter-spacing: 2.5px;
+            text-align: center;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #00f3ff, #ff00ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            filter: drop-shadow(0 0 8px rgba(0, 243, 255, 0.45)) drop-shadow(0 0 8px rgba(255, 0, 255, 0.45));
+            animation: rotate-text-pulse 1.6s ease-in-out infinite;
+        }
+
+        @keyframes rotate-text-pulse {
+            0%, 100% { opacity: 0.75; }
+            50%      { opacity: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .rotate-icon, .rotate-text { animation: none; }
+            .rotate-icon { transform: rotate(-90deg); }
+        }
+
+        /* === TOUCH CONTROLS === */
+        .touch-controls {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 30;
+            pointer-events: none;
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .touch-controls { display: block; }
+        }
+
+        .dpad {
+            position: absolute;
+            right: max(20px, env(safe-area-inset-right, 20px));
+            top: 50%;
+            transform: translateY(-50%);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 8px;
+            width: min(170px, calc(var(--vp-h) * 0.34));
+            height: min(170px, calc(var(--vp-h) * 0.34));
+            pointer-events: auto;
+        }
+
+        .dpad-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 243, 255, 0.15);
+            border: 2px solid rgba(0, 243, 255, 0.6);
+            border-radius: 10px;
+            color: #00f3ff;
+            font-size: clamp(1.5rem, 5vw, 2rem);
+            touch-action: none;
+            user-select: none;
+            transition: all 0.1s ease;
+        }
+
+        .dpad-btn:active, .dpad-btn.pressed {
+            background: rgba(0, 243, 255, 0.5);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.8);
+        }
+
+        .dpad-up { grid-column: 2; grid-row: 1; }
+        .dpad-left { grid-column: 1; grid-row: 2; }
+        .dpad-right { grid-column: 3; grid-row: 2; }
+        .dpad-down { grid-column: 2; grid-row: 3; }
+
+        .fn-controls {
+            position: absolute;
+            left: max(20px, env(safe-area-inset-left, 20px));
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .fn-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            width: min(72px, calc(var(--vp-h) * 0.15));
+            height: min(52px, calc(var(--vp-h) * 0.11));
+            background: rgba(255, 0, 255, 0.15);
+            border: 2px solid rgba(255, 0, 255, 0.6);
+            border-radius: 10px;
+            color: #ff77ff;
+            touch-action: none;
+            user-select: none;
+            transition: all 0.1s ease;
+        }
+
+        .fn-btn:active, .fn-btn.pressed {
+            background: rgba(255, 0, 255, 0.5);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+        }
+
+        .fn-icon { font-size: 1.5rem; }
+        .fn-label { font-size: 0.7rem; font-weight: bold; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+    <div class="rotate-message" id="rotateMessage" aria-hidden="true">
+        <div class="rotate-message-inner">
+            <div class="rotate-icon"></div>
+            <p class="rotate-text">Obróć telefon w poziom</p>
+        </div>
+    </div>
+
+    <script>
+        // === WYMUSZENIE ORIENTACJI POZIOMEJ ===
+        // Musi wystartować jak najwcześniej (przed resztą gry), żeby zdążyć
+        // policzyć --vp-w/--vp-h zanim cokolwiek się narysuje, i żeby po
+        // ukryciu komunikatu bezwarunkowo wymusić landscape - niezależnie od
+        // systemowego ustawienia auto-rotacji Androida.
+        (function () {
+            function isTouchDevice() {
+                return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+            }
+
+            function computeSize() {
+                var w = window.innerWidth, h = window.innerHeight;
+                var portrait = h > w;
+                var forced = isTouchDevice() && portrait;
+                return { forced: forced, width: forced ? h : w, height: forced ? w : h };
+            }
+
+            window.__getRenderSize = computeSize;
+
+            // Wartości startowe dla --vp-w/--vp-h, zanim jeszcze cokolwiek
+            // wymusimy (żeby proporcjonalne klawisze miały sens od pierwszej klatki).
+            document.documentElement.style.setProperty('--vp-w', window.innerWidth + 'px');
+            document.documentElement.style.setProperty('--vp-h', window.innerHeight + 'px');
+
+            function applyLayout() {
+                var s = computeSize();
+                var root = document.documentElement;
+                if (s.forced) {
+                    root.classList.add('force-landscape');
+                    document.body.style.width = s.width + 'px';
+                    document.body.style.height = s.height + 'px';
+                } else {
+                    root.classList.remove('force-landscape');
+                    document.body.style.width = '';
+                    document.body.style.height = '';
+                }
+                root.style.setProperty('--vp-w', s.width + 'px');
+                root.style.setProperty('--vp-h', s.height + 'px');
+                window.dispatchEvent(new Event('game-viewport-resize'));
+            }
+
+            function finishHint() {
+                var hint = document.getElementById('rotateMessage');
+                if (hint) {
+                    hint.classList.add('hide');
+                    window.setTimeout(function () {
+                        hint.style.display = 'none';
+                        applyLayout();
+                    }, 320);
+                } else {
+                    applyLayout();
+                }
+            }
+
+            // Komunikat (jeśli w ogóle widoczny - o tym decyduje CSS
+            // media query orientation:portrait) trzyma się ok. 1,4s, potem
+            // znika, a wyświetlacz bezwarunkowo przechodzi w tryb poziomy.
+            if (isTouchDevice()) {
+                window.setTimeout(finishHint, 1400);
+            }
+
+            window.addEventListener('resize', applyLayout);
+            window.addEventListener('orientationchange', applyLayout);
+        })();
+    </script>
+
+    <div class="game-container">
+        <div class="scoreboard">
+            <div class="score p1-score">P1: <span id="p1-score">0</span></div>
+            <div class="score p2-score">P2: <span id="p2-score">0</span></div>
+        </div>
+
+        <div class="canvas-wrapper">
+            <canvas id="tronCanvas"></canvas>
+            <div id="overlay" class="overlay">
+                <h2 id="overlay-title">SYSTEM READY</h2>
+                <p id="overlay-msg">Kliknij przycisk lub naciśnij <strong>SPACJĘ</strong></p>
+                <button id="start-btn" class="btn-start">URUCHOM CYKL</button>
+            </div>
+        </div>
+
+        <div class="touch-controls" aria-hidden="true">
+            <div class="dpad" id="dpad">
+                <button type="button" class="dpad-btn dpad-up" data-dir="up">▲</button>
+                <button type="button" class="dpad-btn dpad-left" data-dir="left">◀</button>
+                <button type="button" class="dpad-btn dpad-right" data-dir="right">▶</button>
+                <button type="button" class="dpad-btn dpad-down" data-dir="down">▼</button>
+            </div>
+            <div class="fn-controls">
+                <button type="button" class="fn-btn" id="fnPause"><span class="fn-icon">⏸</span><span class="fn-label">PAUZA</span></button>
+                <button type="button" class="fn-btn" id="fnRestart"><span class="fn-icon">↻</span><span class="fn-label">RESTART</span></button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === CANVAS SETUP ===
+        const canvas = document.getElementById('tronCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayMsg = document.getElementById('overlay-msg');
+        const startBtn = document.getElementById('start-btn');
+        const p1ScoreEl = document.getElementById('p1-score');
+        const p2ScoreEl = document.getElementById('p2-score');
+
+        const GRID_SIZE = 50; // Zwiększona siatka = mniejsze ślady
+        // Osobne wymiary komórki dla X/Y - siatka ROZCIĄGA SIĘ na cały
+        // prostokąt canvasu (bez zawijania/przycinania), niezależnie od
+        // proporcji ekranu - tak jak wymaga tego pełnoekranowy tryb poziomy.
+        let CELL_W, CELL_H;
+
+        function resizeCanvas() {
+            const wrapper = document.querySelector('.canvas-wrapper');
+            canvas.width = wrapper.clientWidth;
+            canvas.height = wrapper.clientHeight;
+            CELL_W = canvas.width / GRID_SIZE;
+            CELL_H = canvas.height / GRID_SIZE;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        // Wymuszenie/zdjęcie orientacji poziomej zmienia rozmiar .canvas-wrapper
+        // bez wywoływania natywnego zdarzenia 'resize' - trzeba przeliczyć ręcznie.
+        window.addEventListener('game-viewport-resize', resizeCanvas);
+
+        let p1, p2, isRunning, isPaused, scores, gameLoop;
+
+        function initGame() {
+            p1 = { x: 10, y: 25, dx: 1, dy: 0, trail: [], color: '#00f3ff' };
+            p2 = { x: 40, y: 25, dx: -1, dy: 0, trail: [], color: '#ff0055' };
+            isRunning = false;
+            isPaused = false;
+            scores = { p1: 0, p2: 0 };
+        }
+
+        function startRound() {
+            initGame();
+            isRunning = true;
+            overlay.classList.add('hidden');
+            if (gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(update, 80); // Szybsza gra
+        }
+
+        function update() {
+            if (isPaused) return;
+
+            p1.x += p1.dx;
+            p1.y += p1.dy;
+            p2.x += p2.dx;
+            p2.y += p2.dy;
+
+            p1.trail.push({ x: p1.x, y: p1.y });
+            p2.trail.push({ x: p2.x, y: p2.y });
+
+            if (checkCollision(p1) || checkCollision(p2)) {
+                endRound();
+            }
+
+            draw();
+        }
+
+        function checkCollision(player) {
+            if (player.x < 0 || player.x >= GRID_SIZE || player.y < 0 || player.y >= GRID_SIZE) {
+                return true;
+            }
+            for (let i = 0; i < player.trail.length - 1; i++) {
+                if (player.trail[i].x === player.x && player.trail[i].y === player.y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function endRound() {
+            isRunning = false;
+            clearInterval(gameLoop);
+            
+            if (checkCollision(p1)) scores.p2++;
+            if (checkCollision(p2)) scores.p1++;
+            
+            p1ScoreEl.textContent = scores.p1;
+            p2ScoreEl.textContent = scores.p2;
+            
+            overlayTitle.textContent = "KONIEC RUNDY";
+            overlayTitle.style.color = "#ff0055";
+            overlayMsg.innerHTML = `Wynik: <span style="color:#00f3ff">${scores.p1}</span> - <span style="color:#ff0055">${scores.p2}</span>`;
+            startBtn.textContent = "NASTĘPNA RUNDA";
+            overlay.classList.remove('hidden');
+        }
+
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Siatka
+            ctx.strokeStyle = 'rgba(0, 243, 255, 0.08)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * CELL_W, 0);
+                ctx.lineTo(i * CELL_W, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * CELL_H);
+                ctx.lineTo(canvas.width, i * CELL_H);
+                ctx.stroke();
+            }
+
+            drawPlayer(p1);
+            drawPlayer(p2);
+        }
+
+        function drawPlayer(player) {
+            ctx.fillStyle = player.color;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = player.color;
+            player.trail.forEach(cell => {
+                ctx.fillRect(cell.x * CELL_W + 1, cell.y * CELL_H + 1, CELL_W - 2, CELL_H - 2);
+            });
+            ctx.shadowBlur = 0;
+        }
+
+        function trySetPlayerDirection(player, dx, dy) {
+            if (player.dx === -dx && player.dy === -dy) return;
+            if (dx !== 0 && player.dx === dx) return;
+            if (dy !== 0 && player.dy === dy) return;
+            player.dx = dx;
+            player.dy = dy;
+        }
+
+        // === POPRAWIONE AI - unika kolizji ===
+        function aiMove() {
+            const directions = [
+                { dx: 0, dy: -1 },
+                { dx: 0, dy: 1 },
+                { dx: -1, dy: 0 },
+                { dx: 1, dy: 0 }
+            ];
+            
+            // Filtruj bezpieczne kierunki
+            const safeMoves = directions.filter(dir => {
+                // Nie zawracaj
+                if (dir.dx === -p2.dx && dir.dy === -p2.dy) return false;
+                
+                const newX = p2.x + dir.dx;
+                const newY = p2.y + dir.dy;
+                
+                // Sprawdź ściany
+                if (newX < 0 || newX >= GRID_SIZE || newY < 0 || newY >= GRID_SIZE) {
+                    return false;
+                }
+                
+                // Sprawdź własny ślad
+                for (let i = 0; i < p2.trail.length; i++) {
+                    if (p2.trail[i].x === newX && p2.trail[i].y === newY) {
+                        return false;
+                    }
+                }
+                
+                // Sprawdź ślad gracza 1
+                for (let i = 0; i < p1.trail.length; i++) {
+                    if (p1.trail[i].x === newX && p1.trail[i].y === newY) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            // Wybierz losowy bezpieczny kierunek
+            if (safeMoves.length > 0) {
+                const move = safeMoves[Math.floor(Math.random() * safeMoves.length)];
+                p2.dx = move.dx;
+                p2.dy = move.dy;
+            }
+            // Jeśli brak bezpiecznych - kontynuuj (nieunikniona śmierć)
+        }
+
+        setInterval(() => {
+            if (isRunning && !isPaused) aiMove();
+        }, 150);
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!isRunning) startRound();
+                else {
+                    isPaused = !isPaused;
+                    overlay.classList.toggle('hidden', !isPaused);
+                    if (isPaused) {
+                        overlayTitle.textContent = "PAUZA";
+                        startBtn.textContent = "WZNOWIENIE";
+                    }
+                }
+                return;
+            }
+
+            if (e.code === 'KeyR') {
+                scores = { p1: 0, p2: 0 };
+                p1ScoreEl.textContent = '0';
+                p2ScoreEl.textContent = '0';
+                startRound();
+                return;
+            }
+
+            if (!isRunning || isPaused) return;
+
+            if (e.code === 'ArrowUp') trySetPlayerDirection(p1, 0, -1);
+            if (e.code === 'ArrowDown') trySetPlayerDirection(p1, 0, 1);
+            if (e.code === 'ArrowLeft') trySetPlayerDirection(p1, -1, 0);
+            if (e.code === 'ArrowRight') trySetPlayerDirection(p1, 1, 0);
+        });
+
+        document.querySelectorAll('.dpad-btn').forEach((btn) => {
+            const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+            const [dx, dy] = DIRS[btn.dataset.dir];
+
+            const press = (e) => {
+                e.preventDefault();
+                btn.classList.add('pressed');
+                if (isRunning && !isPaused) trySetPlayerDirection(p1, dx, dy);
+            };
+            const release = (e) => {
+                e.preventDefault();
+                btn.classList.remove('pressed');
+            };
+
+            btn.addEventListener('touchstart', press, { passive: false });
+            btn.addEventListener('touchend', release, { passive: false });
+            btn.addEventListener('touchcancel', release, { passive: false });
+        });
+
+        document.getElementById('fnPause').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isRunning) {
+                isPaused = !isPaused;
+                overlay.classList.toggle('hidden', !isPaused);
+            }
+        }, { passive: false });
+
+        document.getElementById('fnRestart').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            scores = { p1: 0, p2: 0 };
+            p1ScoreEl.textContent = '0';
+            p2ScoreEl.textContent = '0';
+            startRound();
+        }, { passive: false });
+
+        startBtn.addEventListener('click', () => {
+            if (!isRunning) startRound();
+            else if (isPaused) {
+                isPaused = false;
+                overlay.classList.add('hidden');
+            }
+        });
+
+        initGame();
+        draw();
+    </script>
+</body>
+</html>
