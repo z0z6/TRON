@@ -22,10 +22,10 @@
                dla każdej strony (względem rozmiaru elementu, który tam stoi),
                więc D-Pad może być większy niż klawisze funkcyjne bez
                marnowania miejsca po stronie, gdzie stoi coś mniejszego. */
-            --dpad-size: clamp(96px, calc(var(--vp-h) * 0.30), 132px);
+            --dpad-size: clamp(120px, calc(var(--vp-h) * 0.38), 165px);
             --side-margin-right: calc(var(--dpad-size) + 18px);
-            --fn-btn-w: clamp(48px, calc(var(--vp-h) * 0.12), 60px);
-            --fn-btn-h: clamp(34px, calc(var(--vp-h) * 0.085), 44px);
+            --fn-btn-w: clamp(58px, calc(var(--vp-h) * 0.15), 74px);
+            --fn-btn-h: clamp(42px, calc(var(--vp-h) * 0.105), 54px);
             --side-margin-left: calc(var(--fn-btn-w) + 16px);
         }
 
@@ -295,7 +295,7 @@
             border: 2px solid rgba(0, 243, 255, 0.6);
             border-radius: 10px;
             color: #00f3ff;
-            font-size: clamp(1.3rem, 4vw, 1.8rem);
+            font-size: clamp(1.5rem, 4.5vw, 2.1rem);
             touch-action: none;
             user-select: none;
             transition: all 0.1s ease;
@@ -341,8 +341,8 @@
             box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
         }
 
-        .fn-icon { font-size: 1.15rem; }
-        .fn-label { font-size: 0.58rem; font-weight: bold; letter-spacing: 0.5px; }
+        .fn-icon { font-size: 1.3rem; }
+        .fn-label { font-size: 0.65rem; font-weight: bold; letter-spacing: 0.5px; }
     </style>
 </head>
 <body>
@@ -673,23 +673,38 @@
             });
 
             // Krok 2: spośród kierunków "wystarczająco bezpiecznych" (przestrzeń
-            // blisko najlepszej - nie musi być idealnie równa) wybierz TEN, który
-            // przybliża do gracza. Bez tego AI, mając wiele remisujących opcji na
-            // otwartej planszy (co jest normą na starcie rundy), losowało kierunek
-            // za każdym razem od nowa - stąd bezcelowe krążenie w miejscu i
-            // wrażenie, że "nie widzi" przeciwnika. Odległość do gracza jest
-            // WYŁĄCZNIE tie-breakerem - nigdy nie każe wjechać w realnie gorszą
-            // (bardziej samobójczą) opcję.
+            // blisko najlepszej - nie musi być idealnie równa) wybierz kierunek
+            // NIE deterministycznie, tylko losowo z wagami faworyzującymi te,
+            // które przybliżają do PRZEWIDYWANEJ (nie bieżącej) pozycji gracza.
+            // Dwie zmiany względem poprzedniej wersji, obie po to, żeby AI nie
+            // sprawiało wrażenia sztywnego/"kopiującego ruchy":
+            // 1) celowanie kilka pól PRZED gracza (w stronę, w którą jedzie),
+            //    zamiast dokładnie w jego bieżącą pozycję - to wygląda jak
+            //    realne przechwytywanie/odcinanie drogi, nie podążanie krok w
+            //    krok za przeciwnikiem;
+            // 2) wybór ważony losowo (bliżej = bardziej prawdopodobne, ale
+            //    NIE zawsze wygrywa) zamiast sztywnego "zawsze najbliższy" -
+            //    dzięki temu zachowanie nie jest w 100% powtarzalne i trudniej
+            //    się do niego "wyuczyć" jako gracz.
             const SAFETY_MARGIN = Math.max(3, Math.floor(bestScore * 0.15));
             const safeEnough = candidates.filter(c => c.space >= bestScore - SAFETY_MARGIN);
 
-            let best = safeEnough[0];
-            let bestDist = Infinity;
-            for (const c of safeEnough) {
-                const dist = Math.abs(c.nx - p1.x) + Math.abs(c.ny - p1.y);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    best = c;
+            const PREDICT_AHEAD = 4;
+            const predX = Math.max(0, Math.min(GRID_SIZE - 1, p1.x + p1.dx * PREDICT_AHEAD));
+            const predY = Math.max(0, Math.min(GRID_SIZE - 1, p1.y + p1.dy * PREDICT_AHEAD));
+
+            const weighted = safeEnough.map(c => {
+                const dist = Math.abs(c.nx - predX) + Math.abs(c.ny - predY);
+                return { c, weight: 1 / ((dist + 1) * (dist + 1)) };
+            });
+            const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+            let roll = Math.random() * totalWeight;
+            let best = weighted[0].c;
+            for (const w of weighted) {
+                roll -= w.weight;
+                if (roll <= 0) {
+                    best = w.c;
+                    break;
                 }
             }
 
