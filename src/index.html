@@ -22,10 +22,13 @@
                więc D-Pad może być większy niż klawisze funkcyjne bez
                marnowania miejsca po stronie, gdzie stoi coś mniejszego. */
             --dpad-size: clamp(120px, calc(var(--vp-h) * 0.38), 165px);
-            --side-margin-right: calc(var(--dpad-size) + 18px);
-            --fn-btn-w: clamp(58px, calc(var(--vp-h) * 0.15), 74px);
-            --fn-btn-h: clamp(42px, calc(var(--vp-h) * 0.105), 54px);
-            --side-margin-left: calc(var(--fn-btn-w) + 16px);
+            --side-margin-right: calc(var(--dpad-size) + 12px);
+            /* Klawisze funkcyjne - 75% poprzedniego rozmiaru (mniejsze), co
+               automatycznie zwęża lewy margines i oddaje tę przestrzeń polu
+               gry. */
+            --fn-btn-w: clamp(44px, calc(var(--vp-h) * 0.11), 56px);
+            --fn-btn-h: clamp(32px, calc(var(--vp-h) * 0.079), 41px);
+            --side-margin-left: calc(var(--fn-btn-w) + 12px);
         }
 
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000011; }
@@ -269,7 +272,7 @@
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             grid-template-rows: repeat(3, 1fr);
-            gap: 8px;
+            gap: 3px;
             width: var(--dpad-size);
             height: var(--dpad-size);
             pointer-events: auto;
@@ -327,8 +330,8 @@
             box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
         }
 
-        .fn-btn .fn-icon { font-size: 1.2rem; }
-        .fn-btn .fn-label { font-size: 0.6rem; font-weight: bold; letter-spacing: 0.5px; }
+        .fn-btn .fn-icon { font-size: 0.9rem; }
+        .fn-btn .fn-label { font-size: 0.45rem; font-weight: bold; letter-spacing: 0.4px; }
 
         .touch-start-btn {
             display: none;
