@@ -22,6 +22,8 @@ export class Game {
     this.achievementSystem = new AchievementSystem();
     this._lastCloseCallTime = 0;
     this._gridBounds = 45;
+    this._currentDifficulty = 'medium';
+    this._autoRestartTimer = null;
 
     // --- Multiplayer ---
     // multiplayerManager jest przypisywany z zewnątrz (main.js), Game.js nie
@@ -123,6 +125,7 @@ export class Game {
     console.log('Starting single player game...');
     
     this.isMultiplayer = false;
+    this._currentDifficulty = difficulty;
     
     // Inicjalizuj audio TUTAJ, nie tylko na globalny 'click' w init() - gra startuje
     // też klawiaturą (SPACJA/Enter w main.js), która nie generuje zdarzenia 'click'.
@@ -340,6 +343,7 @@ export class Game {
     }
     
     console.log('Player died!');
+    this._scheduleAutoRestart();
   }
 
   handleOpponentDeath() {
@@ -372,6 +376,27 @@ export class Game {
     }
     
     console.log('Opponent died! You win!');
+    this._scheduleAutoRestart();
+  }
+
+  // Automatycznie ładuje kolejną rundę jakiś czas po zakończeniu poprzedniej
+  // - niezależnie od tego, czy gracz zdąży/zdecyduje się nacisnąć RESTART
+  // ręcznie. To główne zabezpieczenie przed sytuacją "runda się skończyła i
+  // nic dalej się nie dzieje" (np. gdy dotyk na małym przycisku RESTART w
+  // rogu ekranu z jakiegoś powodu nie trafi). Tylko single-player - w
+  // multiplayer restart nie jest zsynchronizowany przez sieć (patrz komentarz
+  // przy klawiszu R w main.js).
+  _scheduleAutoRestart() {
+    if (this.isMultiplayer) return;
+    if (this._autoRestartTimer) clearTimeout(this._autoRestartTimer);
+    this._autoRestartTimer = setTimeout(() => {
+      this._autoRestartTimer = null;
+      // Runda mogła się już zacząć ręcznie (gracz sam nacisnął R/RESTART)
+      // zanim minął czas - wtedy nic nie rób, żeby nie przerwać świeżo
+      // zaczętej rundy.
+      if (!this.gameOver) return;
+      this.restart(this._currentDifficulty);
+    }, 2500);
   }
 
   update(deltaTime) {
@@ -453,6 +478,11 @@ export class Game {
   }
 
   restart(difficulty = 'medium') {
+    if (this._autoRestartTimer) {
+      clearTimeout(this._autoRestartTimer);
+      this._autoRestartTimer = null;
+    }
+    this._currentDifficulty = difficulty;
     this.gameOver = false;
     
     this.derezzEffect.clear();
@@ -508,6 +538,10 @@ export class Game {
   }
 
   dispose() {
+    if (this._autoRestartTimer) {
+      clearTimeout(this._autoRestartTimer);
+      this._autoRestartTimer = null;
+    }
     this.audioManager.dispose();
     if (this.playerTrailMesh) this.playerTrailMesh.dispose();
     if (this.powerUpSystem) this.powerUpSystem.clear();
