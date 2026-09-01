@@ -23,13 +23,13 @@
                więc D-Pad może być większy niż klawisze funkcyjne bez
                marnowania miejsca po stronie, gdzie stoi coś mniejszego. */
             --dpad-size: clamp(120px, calc(var(--vp-h) * 0.38), 165px);
-            --side-margin-right: calc(var(--dpad-size) + 6px);
+            --side-margin-right: calc(var(--dpad-size) + 3px);
             /* Klawisze funkcyjne - 75% poprzedniego rozmiaru (mniejsze), co
                automatycznie zwęża lewy margines i oddaje tę przestrzeń polu
                gry. */
             --fn-btn-w: clamp(44px, calc(var(--vp-h) * 0.11), 56px);
             --fn-btn-h: clamp(32px, calc(var(--vp-h) * 0.079), 41px);
-            --side-margin-left: calc(var(--fn-btn-w) + 12px);
+            --side-margin-left: calc(var(--fn-btn-w) + 6px);
         }
 
         html, body {
@@ -676,19 +676,16 @@
             });
 
             // Krok 2: spośród kierunków "wystarczająco bezpiecznych" (przestrzeń
-            // blisko najlepszej - nie musi być idealnie równa) wybierz kierunek
-            // NIE deterministycznie, tylko losowo z wagami faworyzującymi te,
-            // które przybliżają do PRZEWIDYWANEJ (nie bieżącej) pozycji gracza.
-            // Dwie zmiany względem poprzedniej wersji, obie po to, żeby AI nie
-            // sprawiało wrażenia sztywnego/"kopiującego ruchy":
-            // 1) celowanie kilka pól PRZED gracza (w stronę, w którą jedzie),
-            //    zamiast dokładnie w jego bieżącą pozycję - to wygląda jak
-            //    realne przechwytywanie/odcinanie drogi, nie podążanie krok w
-            //    krok za przeciwnikiem;
-            // 2) wybór ważony losowo (bliżej = bardziej prawdopodobne, ale
-            //    NIE zawsze wygrywa) zamiast sztywnego "zawsze najbliższy" -
-            //    dzięki temu zachowanie nie jest w 100% powtarzalne i trudniej
-            //    się do niego "wyuczyć" jako gracz.
+            // blisko najlepszej - nie musi być idealnie równa) wybierz TEN,
+            // który przybliża do PRZEWIDYWANEJ (nie bieżącej) pozycji gracza -
+            // czyli kilka pól przed nim, w stronę, w którą jedzie. To wygląda
+            // jak realne przechwytywanie/odcinanie drogi, a nie podążanie
+            // krok w krok. Wybór jest DETERMINISTYCZNY w większości
+            // przypadków (żeby AI wyraźnie i konsekwentnie reagowało na
+            // gracza), ale z niewielką (20%) szansą na losowy wybór spośród
+            // pozostałych bezpiecznych opcji - tyle wystarczy na odrobinę
+            // nieprzewidywalności, bez rozmywania wrażenia, że AI faktycznie
+            // "widzi" przeciwnika.
             const SAFETY_MARGIN = Math.max(3, Math.floor(bestScore * 0.15));
             const safeEnough = candidates.filter(c => c.space >= bestScore - SAFETY_MARGIN);
 
@@ -696,19 +693,28 @@
             const predX = Math.max(0, Math.min(GRID_SIZE - 1, p1.x + p1.dx * PREDICT_AHEAD));
             const predY = Math.max(0, Math.min(GRID_SIZE - 1, p1.y + p1.dy * PREDICT_AHEAD));
 
-            const weighted = safeEnough.map(c => {
+            let bestDist = Infinity;
+            for (const c of safeEnough) {
                 const dist = Math.abs(c.nx - predX) + Math.abs(c.ny - predY);
-                return { c, weight: 1 / ((dist + 1) * (dist + 1)) };
+                if (dist < bestDist) bestDist = dist;
+            }
+            // WAŻNE: zbierz WSZYSTKICH kandydatów z najmniejszym dystansem i
+            // wybierz spośród nich losowo, zamiast "pierwszy znaleziony
+            // wygrywa". Remisy (np. gdy cel leży po przekątnej - ruch w dół i
+            // ruch w prawo skracają dystans identycznie) są bardzo częste, a
+            // "pierwszy wygrywa" systematycznie faworyzowało kierunki
+            // wcześniejsze w tablicy (góra/dół przed lewo/prawo) - to był
+            // realny błąd, przez który AI nie zbiegało poprawnie do celu po
+            // przekątnej i sprawiało wrażenie, że nie reaguje na gracza.
+            const closest = safeEnough.filter(c => {
+                const dist = Math.abs(c.nx - predX) + Math.abs(c.ny - predY);
+                return dist === bestDist;
             });
-            const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
-            let roll = Math.random() * totalWeight;
-            let best = weighted[0].c;
-            for (const w of weighted) {
-                roll -= w.weight;
-                if (roll <= 0) {
-                    best = w.c;
-                    break;
-                }
+            let best = closest[Math.floor(Math.random() * closest.length)];
+
+            if (safeEnough.length > 1 && Math.random() < 0.2) {
+                const alternatives = safeEnough.filter(c => c !== best);
+                best = alternatives[Math.floor(Math.random() * alternatives.length)];
             }
 
             p2.dx = best.dir.dx;
