@@ -70,36 +70,83 @@ export class AI {
     return currentDir.clone();
   }
 
+  // Zlicza liczbę pustych, osiągalnych pól (BFS) od danego punktu - daje AI
+  // realne "wyczucie przestrzeni" zamiast reagowania tylko na przeszkodę
+  // dosłownie przed nosem. `limit` to twardy sufit liczby odwiedzonych pól
+  // (wydajność) - nie musimy znać DOKŁADNEJ wielkości otwartej przestrzeni,
+  // tylko z grubsza porównać kandydatów względem siebie.
+  countReachableSpace(startX, startZ, playerTrail, aiTrail, limit = 400) {
+    const visited = new Set();
+    const startKey = this.getGridKey(startX, startZ);
+    visited.add(startKey);
+    const stack = [[Math.floor(startX), Math.floor(startZ)]];
+    let count = 0;
+
+    while (stack.length > 0 && count < limit) {
+      const [x, z] = stack.pop();
+      count++;
+
+      const neighbors = [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]];
+      for (const [nx, nz] of neighbors) {
+        const key = `${nx},${nz}`;
+        if (visited.has(key)) continue;
+        if (!this.isCellFree(nx, nz, playerTrail, aiTrail)) continue;
+        visited.add(key);
+        stack.push([nx, nz]);
+      }
+    }
+    return count;
+  }
+
   makeDecision(playerPosition, playerTrail, aiTrail) {
-    const lookAhead = 5;
-    
-    const forwardPos = this.position.clone().add(
-      this.direction.clone().multiplyScalar(lookAhead)
+    const nearAheadDist = 2;
+    const forwardNear = this.position.clone().add(
+      this.direction.clone().multiplyScalar(nearAheadDist)
     );
-    
-    const leftDir = this.getTurnDirection(this.direction, 'left');
-    const rightDir = this.getTurnDirection(this.direction, 'right');
-    
-    const leftPos = this.position.clone().add(leftDir.clone().multiplyScalar(lookAhead));
-    const rightPos = this.position.clone().add(rightDir.clone().multiplyScalar(lookAhead));
-    
-    const forwardFree = this.isCellFree(forwardPos.x, forwardPos.z, playerTrail, aiTrail);
-    const leftFree = this.isCellFree(leftPos.x, leftPos.z, playerTrail, aiTrail);
-    const rightFree = this.isCellFree(rightPos.x, rightPos.z, playerTrail, aiTrail);
-    
-    // Jeśli nie możemy jechać prosto, skręć
-    if (!forwardFree) {
-      if (leftFree) return 'left';
-      if (rightFree) return 'right';
+    const forwardNearFree = this.isCellFree(forwardNear.x, forwardNear.z, playerTrail, aiTrail);
+
+    // Pełna ocena przestrzeni (flood-fill x3 kierunki) jest stosunkowo droga,
+    // więc liczymy ją tylko gdy trzeba: albo mamy przeszkodę tuż przed sobą
+    // (decyzja "na już"), albo minął kawałek czasu od ostatniej oceny -
+    // dzięki temu AI wciąż regularnie "rozgląda się", zamiast jechać ślepo
+    // prosto aż w ścianę.
+    const now = performance.now();
+    const needsUrgentDecision = !forwardNearFree;
+    const dueForPeriodic = !this._lastSmartDecision || (now - this._lastSmartDecision) > 180;
+
+    if (!needsUrgentDecision && !dueForPeriodic) {
       return null;
     }
-    
-    // Losowe skręty co jakiś czas
-    if (Math.random() < 0.02) {
-      return Math.random() < 0.5 ? 'left' : 'right';
+    this._lastSmartDecision = now;
+
+    const leftDir = this.getTurnDirection(this.direction, 'left');
+    const rightDir = this.getTurnDirection(this.direction, 'right');
+    const candidates = [
+      { turn: null, dir: this.direction },
+      { turn: 'left', dir: leftDir },
+      { turn: 'right', dir: rightDir }
+    ];
+
+    let bestTurn = null;
+    let bestScore = -1;
+    for (const c of candidates) {
+      const landing = this.position.clone().add(c.dir.clone().multiplyScalar(nearAheadDist));
+      if (!this.isCellFree(landing.x, landing.z, playerTrail, aiTrail)) continue;
+
+      const space = this.countReachableSpace(landing.x, landing.z, playerTrail, aiTrail);
+      // Niewielka premia za jazdę na wprost, żeby przy remisach przestrzeni
+      // AI nie skręcało bez potrzeby (mniej "szarpane", bardziej naturalne
+      // ruchy) - ale to tylko remisołamacz, przestrzeń zawsze wygrywa.
+      const score = space + (c.turn === null ? 2 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestTurn = c.turn;
+      }
     }
-    
-    return null;
+
+    // Żaden kierunek nie jest bezpieczny - nieunikniona śmierć, jedziemy
+    // dalej (i tak już nic nie pomoże).
+    return bestTurn;
   }
 
   update(deltaTime, playerPosition, playerTrail, aiTrail) {
@@ -153,6 +200,7 @@ export class AI {
     this.direction.set(-1, 0, 0);
     this.mesh.position.copy(this.position);
     this.trail.start(this.position, this.direction);
+    this._lastSmartDecision = null;
     this.show();
     console.log('AI reset to:', this.position);
   }
