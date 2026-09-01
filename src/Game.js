@@ -135,10 +135,10 @@ export class Game {
     this.playerTrail.clear();
     this.opponentTrail.clear();
     
-    // Reset systemów na nową rundę. Robimy to TYLKO tutaj (nie duplikujemy w
-    // restart()), bo to jest jedyne miejsce, które faktycznie odpala rozgrywkę
-    // (restart() tylko resetuje pozycje i czeka na kolejną SPACJĘ) - inaczej
-    // gamesPlayed liczyłoby się podwójnie przy każdej rundzie po restarcie.
+    // Reset systemów na nową rundę. UWAGA: restart() (patrz niżej) ma
+    // WŁASNĄ, analogiczną kopię tej logiki zamiast wywoływać tę metodę -
+    // dzięki temu jedno naciśnięcie R w pełni odpala kolejną rundę (spójnie
+    // z wersją 2D), a gamesPlayed wciąż liczy się dokładnie raz na rundę.
     this.scoringSystem.reset();
     this.powerUpSystem.clear();
     this.player.hasShield = false;
@@ -454,7 +454,6 @@ export class Game {
 
   restart(difficulty = 'medium') {
     this.gameOver = false;
-    this.isStarted = false;
     
     this.derezzEffect.clear();
     this.playerTrail.clear();
@@ -483,9 +482,20 @@ export class Game {
       this.opponent.setDifficulty?.(difficulty);
     }
     
+    // Restart NATYCHMIAST zaczyna nową rundę - spójnie z wersją 2D, gdzie R
+    // od razu odpala kolejną rozgrywkę, zamiast zostawiać gracza w martwym
+    // punkcie "zresetowane pozycje, ale trzeba jeszcze raz nacisnąć SPACJĘ".
+    // gamesPlayed liczymy TU (a nie przez wywołanie startSinglePlayer()),
+    // więc rośnie dokładnie raz na rundę, bez podwójnego liczenia.
+    this.scoringSystem.reset();
+    this.player.hasShield = false;
+    this.player.isGhost = false;
+    this.achievementSystem.incrementStat('gamesPlayed', 1);
+    
+    this.isStarted = true;
     this.audioManager.startEngineSound();
     
-    console.log('Game restarted!');
+    console.log('Game restarted and round started!');
   }
 
   toggleCameraMode() {
