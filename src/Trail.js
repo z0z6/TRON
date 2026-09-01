@@ -37,6 +37,11 @@ export class Trail {
     this.scene.add(this.mesh);
   }
 
+  setColor(color) {
+    this.color = color;
+    this.material.color.set(color);
+  }
+
   _dirKey(direction) {
     return `${Math.round(direction.x)},${Math.round(direction.z)}`;
   }
