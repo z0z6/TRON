@@ -272,7 +272,7 @@ function animate(currentTime) {
   game.update(deltaTime);
   updateScoreHud();
   
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 animate(performance.now());
