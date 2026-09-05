@@ -1,0 +1,36 @@
+name: Build 3D bundle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+  workflow_dispatch: {}   # pozwala też odpalić build ręcznie z zakładki Actions
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: src
+        run: npm ci
+
+      - name: Build
+        working-directory: src
+        run: npm run build
+
+      - name: Commit built 3d/ bundle
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-build 3d bundle from src [skip ci]"
+          file_pattern: '3d/**'
