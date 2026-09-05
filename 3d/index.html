@@ -204,6 +204,36 @@
 
         .theme-menu.open { display: flex; }
 
+        /* === PRZYCISK WYJŚCIA (Esc) - celowo stonowany (szary, bez
+           kolorowej poświaty), żeby nie konkurował wizualnie z przełącznikiem
+           motywu obok, mimo że stoi w tym samym rogu ekranu. Ten sam
+           komponent co w wersji 2D (2d/index.html), patrz komentarz tam. === */
+        .esc-btn {
+            position: fixed;
+            top: 16px;
+            left: 64px;
+            z-index: 40;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(5, 8, 17, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: rgba(224, 247, 252, 0.7);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: all 0.15s ease;
+        }
+
+        .esc-btn:hover, .esc-btn:active {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.5);
+            color: #fff;
+        }
+
         .theme-option {
             display: flex;
             align-items: center;
@@ -445,10 +475,53 @@
         @media (hover: none) and (pointer: coarse) {
             .touch-start-btn { display: block; }
         }
+
+        /* === BANER BŁĘDU - pokazuje treść nieobsłużonego wyjątku JS wprost
+           na ekranie, żeby dało się go odczytać/zrobić zrzut ekranu bez
+           otwierania konsoli deweloperskiej. === */
+        #errorBanner {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            background: rgba(120, 0, 0, 0.92);
+            color: #fff;
+            font-family: 'Courier Prime', 'Courier New', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            padding: 10px 14px;
+            max-height: 40vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            border-bottom: 2px solid #ff5555;
+        }
+
+        #errorBanner.show { display: block; }
     </style>
   <script type="module" crossorigin src="/TRON/3d/assets/index-P5girSv0.js"></script>
 </head>
 <body>
+    <div id="errorBanner"></div>
+    <script>
+        // === ŁAPACZ BŁĘDÓW - musi być pierwszym skryptem w <body>, żeby
+        // złapać wyjątki nawet z odroczonego modułu main.js poniżej ===
+        (function () {
+            var banner = document.getElementById('errorBanner');
+            function show(msg) {
+                banner.textContent += (banner.textContent ? '\n\n' : '') + msg;
+                banner.classList.add('show');
+            }
+            window.addEventListener('error', function (e) {
+                show('BŁĄD JS: ' + e.message + '\n  w ' + (e.filename || '?') + ':' + e.lineno + ':' + e.colno);
+            });
+            window.addEventListener('unhandledrejection', function (e) {
+                show('NIEOBSŁUŻONY BŁĄD (Promise): ' + (e.reason && e.reason.stack ? e.reason.stack : e.reason));
+            });
+        })();
+    </script>
     <script>
         // === MOTYW KOLORYSTYCZNY ===
         // Musi wystartować jak najwcześniej (klasyczny, nie modułowy skrypt -
@@ -562,6 +635,8 @@
             </button>
         </div>
     </div>
+
+    <button type="button" class="esc-btn" id="escBtn" aria-label="Wyjdź do menu (Esc)" title="Wyjdź do menu (Esc)">✕</button>
 
     <div class="rotate-message" id="rotateMessage" aria-hidden="true">
         <div class="rotate-message-inner">
