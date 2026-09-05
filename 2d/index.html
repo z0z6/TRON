@@ -85,6 +85,26 @@
             }
         }
 
+        /* === WINIETA + SKANLINIE (efekt "starego monitora CRT") ===
+           Czysto kosmetyczny overlay nad canvasem - stały (bez migotania,
+           celowo, żeby nie ryzykować dyskomfortu przy światłoczułości) -
+           GPU-owy gradient, zero kosztu na klatkę w JS. */
+        #crtOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            pointer-events: none;
+            background:
+                repeating-linear-gradient(
+                    0deg,
+                    rgba(0, 0, 0, 0.12) 0px,
+                    rgba(0, 0, 0, 0.12) 1px,
+                    transparent 1px,
+                    transparent 3px
+                ),
+                radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.5) 100%);
+        }
+
         #tronCanvas {
             display: block;
             width: 100%;
@@ -712,6 +732,7 @@
 
         <div class="canvas-wrapper">
             <canvas id="tronCanvas"></canvas>
+            <div id="crtOverlay"></div>
             <div id="overlay" class="overlay">
                 <h2 id="overlay-title">SYSTEM READY</h2>
                 <p id="overlay-msg">Kliknij przycisk lub naciśnij <strong>SPACJĘ</strong></p>
@@ -769,6 +790,13 @@
         window.addEventListener('game-viewport-resize', resizeCanvas);
 
         let p1, p2, isRunning, isPaused, scores, gameLoop;
+        // --- Efekty wizualne (niezależne od stałego kroku logiki 80ms -
+        // patrz renderLoop() na dole pliku, który je aktualizuje i rysuje
+        // co klatkę ekranu, żeby wybuch/potrząśnięcie były płynne). ---
+        let explosion = null;   // { particles: [...], color } - wybuch derezz przy kolizji
+        let shakeUntil = 0;     // performance.now(), do kiedy potrząsać ekranem
+        let flashStartTime = 0; // performance.now() startu rundy - krótki błysk "boot-up"
+        let lastFrameTime = performance.now();
         scores = { p1: 0, p2: 0 }; // Wynik trwa przez kolejne rundy, resetuje go tylko pełny restart.
 
         function initGame() {
@@ -785,6 +813,7 @@
             overlay.classList.add('hidden');
             if (gameLoop) clearInterval(gameLoop);
             gameLoop = setInterval(update, 80); // Szybsza gra
+            flashStartTime = performance.now(); // krótki błysk "boot-up" na starcie rundy
         }
 
         function update() {
@@ -813,8 +842,6 @@
             if (checkCollision(p1, p2) || checkCollision(p2, p1)) {
                 endRound();
             }
-
-            draw();
         }
 
         function checkCollision(player, opponent) {
@@ -841,8 +868,16 @@
             isRunning = false;
             clearInterval(gameLoop);
             
-            if (checkCollision(p1, p2)) scores.p2++;
-            if (checkCollision(p2, p1)) scores.p1++;
+            const p1Crashed = checkCollision(p1, p2);
+            const p2Crashed = checkCollision(p2, p1);
+            if (p1Crashed) scores.p2++;
+            if (p2Crashed) scores.p1++;
+
+            // Wybuch derezz w miejscu zderzenia - przy czołówce (obaj naraz)
+            // dwa wybuchy, każdy w kolorze swojego gracza.
+            if (p1Crashed) spawnExplosion(p1.x * CELL_W + CELL_W / 2, p1.y * CELL_H + CELL_H / 2, p1.color);
+            if (p2Crashed) spawnExplosion(p2.x * CELL_W + CELL_W / 2, p2.y * CELL_H + CELL_H / 2, p2.color);
+            shakeUntil = performance.now() + 320;
             
             p1ScoreEl.textContent = scores.p1;
             p2ScoreEl.textContent = scores.p2;
@@ -857,11 +892,25 @@
 
         function draw() {
             const theme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055', bg: '#050811' };
+            const now = performance.now();
+
+            ctx.save();
+
+            // Potrząśnięcie ekranem przy kolizji - zanikające wraz z upływem
+            // czasu od shakeUntil (patrz endRound/spawnExplosion).
+            if (now < shakeUntil) {
+                const remaining = (shakeUntil - now) / 320;
+                const mag = 7 * remaining;
+                ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+            }
+
             ctx.fillStyle = theme.bg || '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Siatka
-            ctx.strokeStyle = window.__tronHexToRgba ? window.__tronHexToRgba(theme.p1, 0.08) : 'rgba(0, 243, 255, 0.08)';
+            // Siatka - delikatnie "oddycha" (pulsująca alpha), żeby tło nie
+            // było całkowicie statyczne nawet poza rundą.
+            const pulse = 0.06 + Math.sin(now / 1200) * 0.03;
+            ctx.strokeStyle = window.__tronHexToRgba ? window.__tronHexToRgba(theme.p1, pulse) : `rgba(0, 243, 255, ${pulse})`;
             ctx.lineWidth = 1;
             for (let i = 0; i <= GRID_SIZE; i++) {
                 ctx.beginPath();
@@ -878,6 +927,19 @@
             drawRipple(p2);
             drawPlayer(p1);
             drawPlayer(p2);
+            drawExplosion();
+
+            // Krótki, jednorazowy błysk przy starcie rundy ("boot-up") -
+            // celowo krótki i niezbyt jasny, żeby był efektowny, ale nie
+            // migotał (patrz uwaga o światłoczułości przy #crtOverlay).
+            const flashElapsed = (now - flashStartTime) / 1000;
+            if (flashElapsed >= 0 && flashElapsed < 0.35) {
+                const alpha = (1 - flashElapsed / 0.35) * 0.35;
+                ctx.fillStyle = window.__tronHexToRgba ? window.__tronHexToRgba(theme.p1, alpha) : `rgba(255,255,255,${alpha})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            ctx.restore();
         }
 
         // Fala światła pod motocyklem - odpowiednik efektu z wersji 3D
@@ -908,13 +970,115 @@
         }
 
         function drawPlayer(player) {
-            ctx.fillStyle = player.color;
-            ctx.shadowBlur = 5; // było 8 - spójne z przyciszonym bloomem w 3D
+            const len = player.trail.length;
+            // Ogon blaknie w stronę tyłu (kometa) zamiast być jednolitą
+            // wstęgą - tylko ostatnie FADE_WINDOW komórek liczy alpha,
+            // starsze (już całkiem "dojrzałe") rysują się w pełnej
+            // nieprzezroczystości bez dodatkowych obliczeń.
+            const FADE_WINDOW = 40;
             ctx.shadowColor = player.color;
-            player.trail.forEach(cell => {
+            ctx.shadowBlur = 5;
+            player.trail.forEach((cell, i) => {
+                const distFromHead = len - 1 - i;
+                ctx.globalAlpha = distFromHead < FADE_WINDOW
+                    ? 0.35 + 0.65 * (1 - distFromHead / FADE_WINDOW)
+                    : 1;
+                ctx.fillStyle = player.color;
                 ctx.fillRect(cell.x * CELL_W + 1, cell.y * CELL_H + 1, CELL_W - 2, CELL_H - 2);
             });
+            ctx.globalAlpha = 1;
+
+            // Głowa motocykla - wyraźnie jaśniejsza (większy blur) niż ślad,
+            // z małym białym "gorącym" rdzeniem pośrodku - czytelnie
+            // odróżnia przód pojazdu od reszty wstęgi.
+            const head = player.trail[len - 1];
+            if (head) {
+                const hx = head.x * CELL_W + CELL_W / 2;
+                const hy = head.y * CELL_H + CELL_H / 2;
+                const r = Math.max(CELL_W, CELL_H) * 0.65;
+
+                ctx.shadowBlur = 14;
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.arc(hx, hy, r, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.beginPath();
+                ctx.arc(hx, hy, r * 0.38, 0, Math.PI * 2);
+                ctx.fill();
+            }
             ctx.shadowBlur = 0;
+        }
+
+        // === WYBUCH DEREZZ ===
+        // Prosty system cząsteczek (canvas, bez zależności) - iskry
+        // rozlatujące się promieniście z miejsca kolizji, z tarciem
+        // (spowalnianie) i gasnące (życie -> alpha). Aktualizowane w
+        // renderLoop() (pełna klatka ekranu, nie stały krok 80ms logiki),
+        // żeby ruch był płynny.
+        function spawnExplosion(cx, cy, color) {
+            const particles = [];
+            const count = 26;
+            for (let i = 0; i < count; i++) {
+                const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+                const speed = 70 + Math.random() * 140;
+                particles.push({
+                    x: cx, y: cy,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1
+                });
+            }
+            // Kilka wybuchów naraz (czołówka = dwa, jeden po drugim w tej
+            // samej klatce) - dokładamy cząsteczki do wspólnej puli zamiast
+            // nadpisywać poprzedni wybuch.
+            if (!explosion) explosion = { particles: [] };
+            explosion.particles.push(...particles.map(p => ({ ...p, color })));
+        }
+
+        function updateExplosion(dt) {
+            if (!explosion) return;
+            for (const p of explosion.particles) {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vx *= Math.pow(0.05, dt); // tarcie - niezależne od framerate
+                p.vy *= Math.pow(0.05, dt);
+                p.life -= dt * 1.3;
+            }
+            explosion.particles = explosion.particles.filter(p => p.life > 0);
+            if (explosion.particles.length === 0) explosion = null;
+        }
+
+        function drawExplosion() {
+            if (!explosion) return;
+            for (const p of explosion.particles) {
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+        }
+
+        // === PĘTLA RENDEROWANIA ===
+        // Osobna od logiki gry (setInterval(update, 80), stały krok 80ms) -
+        // rysuje co klatkę ekranu (requestAnimationFrame), żeby wybuch i
+        // fala świetlna (drawRipple) były płynne niezależnie od tempa
+        // symulacji. Działa zawsze (nawet w pauzie/przed startem rundy),
+        // żeby idle-screen i dogasający wybuch/potrząśnięcie po końcu
+        // rundy nadal się renderowały.
+        function renderLoop(now) {
+            requestAnimationFrame(renderLoop);
+            const dt = Math.min(0.1, (now - lastFrameTime) / 1000); // clamp na wypadek zakładki w tle
+            lastFrameTime = now;
+            updateExplosion(dt);
+            draw();
         }
 
         function trySetPlayerDirection(player, dx, dy) {
@@ -1139,7 +1303,7 @@
         });
 
         initGame();
-        draw();
+        renderLoop(performance.now());
     </script>
 </body>
 </html>
