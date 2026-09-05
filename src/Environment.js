@@ -32,9 +32,9 @@ export class SynthwaveEnvironment {
     // stylistyki synthwave/Tron. Wspólna dla wszystkich motywów tła.
     const geometry = new THREE.PlaneGeometry(400, 400);
     this.floorBase = new Reflector(geometry, {
-      color: 0x1c1c48, // było 0x0a0a2e - jaśniejszy tint, żeby odbicie tła (słońca, gór, miasta...) było faktycznie widoczne, nie prawie czarne
-      textureWidth: 1024,
-      textureHeight: 1024,
+      color: 0x2c2c5e, // było 0x1c1c48 - jeszcze jaśniejszy tint, mocniej "wypolerowana" podłoga
+      textureWidth: 2048, // było 1024 - ostrzejsze, wyraźniejsze odbicie tła pod motocyklem
+      textureHeight: 2048,
       clipBias: 0.003
     });
     this.floorBase.rotation.x = -Math.PI / 2;
