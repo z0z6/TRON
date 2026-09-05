@@ -3,13 +3,13 @@ import * as THREE from 'three';
 // === REJESTR MOTYWÓW TŁA ===
 // Każdy motyw to: build() -> THREE.Group (elementy sceny) i opcjonalnie
 // update(group, elapsed, deltaTime) dla animowanych elementów (np. spadający
-// "deszcz" w motywie matrix). Environment.js (setTheme) zarządza tym, KTÓRY
-// motyw jest aktywny - ten plik zna tylko, JAK zbudować każdy z nich.
+// "deszcz" w motywie matrix, migoczące światła w classic). Environment.js
+// (setTheme) zarządza tym, KTÓRY motyw jest aktywny - ten plik zna tylko,
+// JAK zbudować każdy z nich.
 //
-// Wspólny wzorzec z resztą kodu (Environment.js sprzed refaktoru): stały,
-// deterministyczny seed na motyw, żeby układ elementów nie zmieniał się
-// między przeładowaniami strony, ale każdy motyw miał INNY, powtarzalny
-// układ.
+// Wspólny wzorzec: stały, deterministyczny seed na motyw, żeby układ
+// elementów nie zmieniał się między przeładowaniami strony, ale każdy motyw
+// miał INNY, powtarzalny układ.
 function makeRand(seed) {
   let s = seed;
   return () => {
@@ -23,24 +23,39 @@ function disposeAwareAdd(group, obj) {
   return obj;
 }
 
-// --- TRON CLASSIC: centra danych / superkomputery -------------------------
-// To, co wcześniej było na stałe w Environment.js - dwie warstwy
-// prostopadłościennych "serwerowni" w pierścieniu wokół areny, część z
-// cienkimi antenami, plus drobne, świecące "diody danych" na fasadach.
-// Generuje teksturę "fasady z oknami" (canvas) - współdzielona przez
-// wszystkie budynki danej warstwy (InstancedMesh ma jeden materiał na
-// wszystkie instancje), ale każdy budynek dostaje inny fragment/gęstość
-// przez własny texture.repeat... a że InstancedMesh nie pozwala na
-// per-instance repeat, kompensujemy to różnicami w skali budynków (patrz
-// addLayer) i losowym wzorem okien w samej teksturze.
+// Ta sama wysokość co Reflector w Environment.js - punkt odniesienia dla
+// "zakopywania" elementów tła pod posadzkę (patrz buryBelowFloor niżej).
+const FLOOR_Y = -0.55;
+
+// === EFEKT "CYLINDRA" ===
+// Rozszerza pion elementu W DÓŁ, POD poziom podłogi, zachowując jego
+// pierwotny "widoczny" wierzchołek na tej samej wysokości co wcześniej.
+// Dzięki temu posadzka wygląda jak cienki dysk zawieszony w środku dużo
+// wyższego cylindra tła, a nie jak sufit stojący dokładnie na fundamencie
+// każdego obiektu - reszta świata ciągnie się dalej w dół, poza zasięgiem
+// wzroku. Zwraca {centerY, totalHeight} do użycia jako position.y/scale.y.
+function buryBelowFloor(rand, visibleHeight, minBuried, maxBuried) {
+  const buried = minBuried + rand() * (maxBuried - minBuried);
+  const topY = FLOOR_Y + visibleHeight;
+  const totalHeight = visibleHeight + buried;
+  const centerY = topY - totalHeight / 2;
+  return { centerY, totalHeight };
+}
+
+// === TRON CLASSIC: centra danych / superkomputery ==========================
+// Trzy warstwy prostopadłościennych "serwerowni" w pierścieniu wokół areny
+// (bliska/średnia/daleka - więcej warstw niż wcześniej = więcej głębi),
+// część z cienkimi antenami, tekstura okien na fasadach, delikatna losowa
+// wariacja jasności KAŻDEGO budynku, i setki drobnych, MIGOCZĄCYCH "diod
+// danych" (nie tylko statyczne punkty jak wcześniej).
 function buildWindowFacadeTexture(rand) {
   const canvas = document.createElement('canvas');
-  canvas.width = 64;
-  canvas.height = 128;
+  canvas.width = 96;
+  canvas.height = 192;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#0b0b26';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const cols = 6, rows = 16;
+  const cols = 8, rows = 22;
   const cw = canvas.width / cols, ch = canvas.height / rows;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -62,18 +77,18 @@ function buildClassicBackground() {
   const group = new THREE.Group();
   const facadeTexture = buildWindowFacadeTexture(rand);
 
-  function addLayer({ count, radiusMin, radiusMax, heightMin, heightMax, color, spires }) {
+  function addLayer({ count, radiusMin, radiusMax, heightMin, heightMax, color, spires, buried }) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     // MeshStandardMaterial zamiast MeshBasicMaterial - reaguje na światła
-    // sceny (ambient + directional z main.js), więc każda ściana budynku
-    // dostaje inny odcień zależnie od kąta do światła (góra jaśniejsza,
-    // boki w cieniu) zamiast być jednolitą, płaską plamą koloru. Tekstura
-    // okien (map) dokłada realny detal powierzchni.
+    // sceny (ambient + directional + fill/rim, patrz main.js), więc każda
+    // ściana budynku dostaje inny odcień zależnie od kąta do światła (góra
+    // jaśniejsza, boki w cieniu, druga strona doświetlona chłodnym fill
+    // lightem) zamiast być jednolitą, płaską plamą koloru.
     const material = new THREE.MeshStandardMaterial({
       color,
       map: facadeTexture,
-      roughness: 0.75,
-      metalness: 0.15,
+      roughness: 0.7,
+      metalness: 0.2,
       emissive: color,
       emissiveIntensity: 0.15, // odrobina "własnego" blasku, żeby ciemna strona budynku nie ginęła całkiem w czerni
       fog: true
@@ -105,13 +120,21 @@ function buildClassicBackground() {
       const height = heightMin + rand() * (heightMax - heightMin);
       const px = Math.cos(angle) * radius, pz = Math.sin(angle) * radius;
 
-      dummy.position.set(px, height / 2 - 0.55, pz);
-      dummy.scale.set(width, height, depth);
+      // Efekt "cylindra" - budynek sięga daleko POD posadzkę, nie tylko do
+      // jej poziomu, żeby scena wyglądała jak wnętrze wielkiej rury, w
+      // której podłoga jest tylko cienkim, zawieszonym diskiem.
+      const { centerY, totalHeight } = buryBelowFloor(rand, height, buried[0], buried[1]);
+
+      dummy.position.set(px, centerY, pz);
+      dummy.scale.set(width, totalHeight, depth);
       dummy.rotation.y = rand() * Math.PI;
       dummy.updateMatrix();
       layer.setMatrixAt(i, dummy.matrix);
       layer.setColorAt(i, baseColor.clone().multiplyScalar(0.75 + rand() * 0.5));
 
+      // Anteny stoją na WIDOCZNYM wierzchołku budynku (height, nie
+      // totalHeight - zakopana część jest niewidoczna, więc nie ma sensu
+      // stawiać na niej anteny).
       if (spires && rand() < 0.35) {
         const sh = 6 + rand() * 14;
         dummy.position.set(px, height - 0.55 + sh / 2, pz);
@@ -131,10 +154,16 @@ function buildClassicBackground() {
     }
   }
 
-  addLayer({ count: 42, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x22225c, spires: true });
-  addLayer({ count: 50, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x141438 });
+  // Trzy warstwy głębi zamiast dwóch - bliska, średnia, daleka - więcej
+  // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery.
+  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x22225c, spires: true, buried: [20, 55] });
+  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x141438, spires: true, buried: [30, 80] });
+  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x0c0c26, buried: [40, 110] });
 
-  const lightCount = 420;
+  // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
+  // statyczne) - patrz updateClassicBackground(). Znacznie więcej niż
+  // wcześniej (były 420, teraz 900) dla gęstszego, bardziej "żywego" pola. ---
+  const lightCount = 900;
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.95,
@@ -144,22 +173,58 @@ function buildClassicBackground() {
   const dummy = new THREE.Object3D();
   const colorA = new THREE.Color(0x00ffff).multiplyScalar(1.6);
   const colorB = new THREE.Color(0xff0055).multiplyScalar(1.6);
+  const isA = new Uint8Array(lightCount);
+  const phases = new Float32Array(lightCount);
   for (let i = 0; i < lightCount; i++) {
     const angle = rand() * Math.PI * 2;
-    const radius = 90 + rand() * 190;
-    const height = 2 + rand() * 170;
+    const radius = 90 + rand() * 340;
+    const height = 2 + rand() * 250;
     dummy.position.set(Math.cos(angle) * radius, height - 0.55, Math.sin(angle) * radius);
-    const s = 0.6 + rand() * 1.6;
+    const s = 0.5 + rand() * 1.7;
     dummy.scale.set(s, s * 0.35, 0.15);
     dummy.rotation.y = rand() * Math.PI;
     dummy.updateMatrix();
     lights.setMatrixAt(i, dummy.matrix);
-    lights.setColorAt(i, rand() < 0.5 ? colorA : colorB);
+    const a = rand() < 0.5;
+    isA[i] = a ? 1 : 0;
+    phases[i] = rand() * Math.PI * 2;
+    lights.setColorAt(i, a ? colorA : colorB);
   }
   lights.instanceColor.needsUpdate = true;
   disposeAwareAdd(group, lights);
 
+  group.userData.classicLights = lights;
+  group.userData.classicLightIsA = isA;
+  group.userData.classicLightPhases = phases;
+  group.userData.classicColorA = colorA;
+  group.userData.classicColorB = colorB;
+  group.userData.classicTwinkleCursor = 0;
+  group.userData.classicScratchColor = new THREE.Color();
+
   return group;
+}
+
+// Migoczące diody - zamiast przeliczać WSZYSTKIE 900 co klatkę (kosztowne
+// i niepotrzebne - oko i tak nie nadąży ocenić każdej naraz), aktualizuje
+// tylko rotacyjną "porcję" (batch) na klatkę. Przy 90/klatkę cały zestaw
+// odświeża się co ~10 klatek (~0.15s przy 60fps) - dalej wygląda jak ciągłe
+// skrzenie się, ale dużo taniej.
+function updateClassicBackground(group, elapsed) {
+  const { classicLights: lights, classicLightIsA: isA, classicLightPhases: phases,
+    classicColorA: colorA, classicColorB: colorB, classicScratchColor: scratch } = group.userData;
+  if (!lights) return;
+
+  const total = phases.length;
+  const batch = 90;
+  let cursor = group.userData.classicTwinkleCursor;
+  for (let n = 0; n < batch; n++) {
+    const i = (cursor + n) % total;
+    const twinkle = 0.55 + 0.45 * Math.sin(elapsed * 2.2 + phases[i]);
+    scratch.copy(isA[i] ? colorA : colorB).multiplyScalar(twinkle);
+    lights.setColorAt(i, scratch);
+  }
+  group.userData.classicTwinkleCursor = (cursor + batch) % total;
+  lights.instanceColor.needsUpdate = true;
 }
 
 // Generuje teksturę słońca (canvas, radialny gradient) - daje realne
@@ -203,7 +268,6 @@ function buildSunTexture(rand, { core, mid, stripes }) {
 // nim - czyli geometrycznie poprawne, ale w pełni kontrolowane.
 function buildSunWithReflection(rand, { core, mid, stripes, radius, skyY, opacity }) {
   const group = new THREE.Group();
-  const floorY = -0.55; // ta sama wysokość co Reflector w Environment.js
   const texture = buildSunTexture(rand, { core, mid, stripes });
 
   const material = new THREE.MeshBasicMaterial({
@@ -217,10 +281,30 @@ function buildSunWithReflection(rand, { core, mid, stripes, radius, skyY, opacit
   const reflection = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2), material.clone());
   reflection.material.opacity = opacity * 0.3;
   reflection.scale.y = -1;
-  reflection.position.set(0, 2 * floorY - skyY, -260);
+  reflection.position.set(0, 2 * FLOOR_Y - skyY, -260);
   group.add(reflection);
 
   return group;
+}
+
+// Prosty gwiazdozbiór (Points) w górnej połowie nieba - tani sposób na
+// dołożenie drobnego detalu/głębi bez dodatkowych draw calli (jeden Points
+// na cały zestaw).
+function buildStarfield(rand, count, color, radiusMin, radiusMax, heightMin, heightMax) {
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const angle = rand() * Math.PI * 2;
+    const radius = radiusMin + rand() * (radiusMax - radiusMin);
+    positions[i * 3] = Math.cos(angle) * radius;
+    positions[i * 3 + 1] = heightMin + rand() * (heightMax - heightMin);
+    positions[i * 3 + 2] = Math.sin(angle) * radius;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color, size: 1.1, transparent: true, opacity: 0.7, fog: false, depthWrite: false
+  });
+  return new THREE.Points(geometry, material);
 }
 
 // --- SYNTHWAVE: low-poly góry z linii + kultowe zachodzące słońce --------
@@ -236,6 +320,8 @@ function buildSynthwaveBackground() {
 
   // Góry - kontur (LineSegments, nie wypełnione trójkąty), żeby wyglądały
   // jak fluorescencyjne linie na tle ciemnego nieba, nie pełne bryły.
+  // Iglice grzbietu schodzą daleko POD posadzkę (efekt cylindra) zamiast
+  // kończyć się tuż przy jej poziomie.
   function buildRidge(radius, baseHeight, color, segments) {
     const points = [];
     const step = (Math.PI * 2) / segments;
@@ -248,7 +334,8 @@ function buildSynthwaveBackground() {
     for (let i = 0; i < points.length - 1; i++) {
       positions.push(points[i].x, points[i].y, points[i].z, points[i + 1].x, points[i + 1].y, points[i + 1].z);
       if (i % 2 === 0) {
-        positions.push(points[i].x, points[i].y, points[i].z, points[i].x, -1, points[i].z);
+        const buriedDepth = -(20 + rand() * 35);
+        positions.push(points[i].x, points[i].y, points[i].z, points[i].x, buriedDepth, points[i].z);
       }
     }
     const geometry = new THREE.BufferGeometry();
@@ -257,8 +344,12 @@ function buildSynthwaveBackground() {
     return new THREE.LineSegments(geometry, material);
   }
 
-  disposeAwareAdd(group, buildRidge(220, 60, 0x00eaff, 28));
-  disposeAwareAdd(group, buildRidge(280, 95, 0xff2f9e, 22));
+  // Trzy grzbiety zamiast dwóch - bliski/średni/daleki (więcej głębi/detalu).
+  disposeAwareAdd(group, buildRidge(190, 45, 0xff2f9e, 24));
+  disposeAwareAdd(group, buildRidge(240, 65, 0x00eaff, 28));
+  disposeAwareAdd(group, buildRidge(310, 100, 0xff2f9e, 22));
+
+  disposeAwareAdd(group, buildStarfield(rand, 220, 0xffffff, 80, 400, 60, 220));
 
   return group;
 }
@@ -267,21 +358,21 @@ function buildSynthwaveBackground() {
 // Prawdziwe znaki (cyfry/katakana-podobne symbole) wypalone w jednej,
 // pionowej teksturze canvas, powielanej (RepeatWrapping) na wysokich,
 // wąskich płaszczyznach ustawionych w pierścieniu wokół areny. Animacja
-// "spadania" to tylko przesuwanie texture.offset.y co klatkę - tanie, bez
+// "spadania" to przesuwanie texture.offset.y co klatkę - tanie, bez
 // dotykania geometrii. Każda kolumna to DWIE płaszczyzny na krzyż (90°),
 // żeby była widoczna z dowolnego kąta kamery, nie tylko "na wprost".
 function buildMatrixCharacterTexture(rand) {
   const canvas = document.createElement('canvas');
-  canvas.width = 64;
-  canvas.height = 512;
+  canvas.width = 80;
+  canvas.height = 640;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = '30px monospace';
+  ctx.font = '26px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const chars = '01アイウエオカキクケコサシスセソタチツテト';
-  for (let y = 16; y < canvas.height; y += 32) {
+  const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
+  for (let y = 14; y < canvas.height; y += 26) {
     const ch = chars[Math.floor(rand() * chars.length)];
     const bright = rand();
     ctx.fillStyle = bright < 0.15 ? '#eaffea' : '#3dff6e';
@@ -298,40 +389,58 @@ function buildMatrixBackground() {
   const rand = makeRand(7331);
   const group = new THREE.Group();
   const baseTexture = buildMatrixCharacterTexture(rand);
-
-  const columnsCount = 46;
   const columns = [];
 
-  for (let c = 0; c < columnsCount; c++) {
-    const angle = (c / columnsCount) * Math.PI * 2 + rand() * 0.05;
-    const radius = 90 + rand() * 170;
-    const height = 55 + rand() * 85;
+  // Jedna warstwa strumieni (wywoływana dwa razy - bliżej/dalej, patrz
+  // niżej). Każdy strumień ma WŁASNY cykl życia (cycleDuration/cycleOffset)
+  // - płynnie "rodzi się" (jakby zaczynał spływać z góry) i "kończy"
+  // (zanika), zamiast być wiecznie niezmienną pętlą - patrz
+  // updateMatrixBackground().
+  function addLayer(count, radiusMin, radiusMax, heightMin, heightMax, opacity, speedMin, speedMax, widthMin, widthMax) {
+    for (let c = 0; c < count; c++) {
+      const angle = rand() * Math.PI * 2;
+      const radius = radiusMin + rand() * (radiusMax - radiusMin);
+      const visibleHeight = heightMin + rand() * (heightMax - heightMin);
+      // Cylinder: strumień ciągnie się daleko pod posadzkę, nie tylko do
+      // jej poziomu.
+      const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 20, 60);
 
-    // Własny klon tekstury per kolumna - każda potrzebuje NIEZALEŻNEGO
-    // texture.offset.y (prędkość/faza), więc nie może być to jeden
-    // współdzielony obiekt Texture (offset jest właściwością tekstury, nie
-    // materiału).
-    const texture = baseTexture.clone();
-    texture.needsUpdate = true;
-    texture.repeat.set(1, height / 16);
-    texture.offset.y = rand();
+      const texture = baseTexture.clone();
+      texture.needsUpdate = true;
+      texture.repeat.set(1, totalHeight / 14);
+      texture.offset.y = rand();
 
-    const material = new THREE.MeshBasicMaterial({
-      map: texture, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
-    });
-    const geometry = new THREE.PlaneGeometry(7, height);
+      const material = new THREE.MeshBasicMaterial({
+        map: texture, transparent: true, opacity,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
+      });
+      const width = widthMin + rand() * (widthMax - widthMin);
+      const geometry = new THREE.PlaneGeometry(width, totalHeight);
 
-    const cross = new THREE.Group();
-    const plane1 = new THREE.Mesh(geometry, material);
-    const plane2 = new THREE.Mesh(geometry, material);
-    plane2.rotation.y = Math.PI / 2;
-    cross.add(plane1, plane2);
-    cross.position.set(Math.cos(angle) * radius, height / 2 - 0.55, Math.sin(angle) * radius);
-    disposeAwareAdd(group, cross);
+      const cross = new THREE.Group();
+      const plane1 = new THREE.Mesh(geometry, material);
+      const plane2 = new THREE.Mesh(geometry, material);
+      plane2.rotation.y = Math.PI / 2;
+      cross.add(plane1, plane2);
+      cross.position.set(Math.cos(angle) * radius, centerY, Math.sin(angle) * radius);
+      disposeAwareAdd(group, cross);
 
-    columns.push({ texture, speed: 0.12 + rand() * 0.3 });
+      const cycleDuration = 5 + rand() * 12;
+      columns.push({
+        texture, material,
+        speed: speedMin + rand() * (speedMax - speedMin),
+        cycleDuration,
+        cycleOffset: rand() * cycleDuration,
+        baseOpacity: opacity
+      });
+    }
   }
+
+  // Bliższa warstwa - mniej strumieni, ale szersze, jaśniejsze i szybsze.
+  addLayer(46, 90, 160, 55, 100, 0.9, 20, 45, 5, 9);
+  // Dalsza warstwa - więcej, drobniejsze, wolniejsze i przygaszone (głębia,
+  // paralaksa przy skręcaniu kamery).
+  addLayer(64, 170, 300, 70, 150, 0.42, 8, 20, 6, 12);
 
   group.userData.matrixColumns = columns;
   return group;
@@ -342,13 +451,25 @@ function updateMatrixBackground(group, elapsed, deltaTime) {
   if (!columns) return;
   for (const col of columns) {
     col.texture.offset.y -= col.speed * deltaTime;
+
+    // Cykl życia strumienia - płynne pojawianie się (jakby zaczynał spływać
+    // z góry) i zanikanie (jakby "kończył się"), zamiast wiecznie
+    // niezmiennej pętli. Po dojściu do zera cykl zaczyna się od nowa w tym
+    // samym miejscu - kolejny strumień "rodzi się" tam, gdzie poprzedni
+    // właśnie zniknął.
+    const t = (elapsed + col.cycleOffset) % col.cycleDuration;
+    const fadeWindow = 1.0;
+    const fadeIn = Math.min(1, t / fadeWindow);
+    const fadeOut = Math.min(1, (col.cycleDuration - t) / fadeWindow);
+    col.material.opacity = col.baseOpacity * Math.min(fadeIn, fadeOut);
   }
 }
 
 // --- AMBER: krajobraz vaporwave --------------------------------------------
 // Ciepłe, gradientowe słońce (bez prążków - to odróżnia je od synthwave) +
 // unoszące się, obracające się druciane "święte geometrie" (piramidy,
-// torusy) charakterystyczne dla estetyki vaporwave.
+// torusy) + pierścień niskich, drucianych kolumn/pylonów (klasyczny motyw
+// vaporwave - "greckie kolumny"), zakopanych pod posadzką (cylinder).
 function buildAmberBackground() {
   const rand = makeRand(9001);
   const group = new THREE.Group();
@@ -358,7 +479,7 @@ function buildAmberBackground() {
   }));
 
   const shapes = [];
-  const shapesCount = 16;
+  const shapesCount = 26;
   for (let i = 0; i < shapesCount; i++) {
     const isTorus = rand() < 0.5;
     const geometry = isTorus
@@ -368,14 +489,31 @@ function buildAmberBackground() {
     const material = new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.8, fog: true });
     const mesh = new THREE.Mesh(geometry, material);
     const angle = rand() * Math.PI * 2;
-    const radius = 100 + rand() * 180;
-    mesh.position.set(Math.cos(angle) * radius, 15 + rand() * 60, Math.sin(angle) * radius);
+    const radius = 100 + rand() * 220;
+    mesh.position.set(Math.cos(angle) * radius, 15 + rand() * 70, Math.sin(angle) * radius);
     mesh.rotation.set(rand() * Math.PI, rand() * Math.PI, 0);
     mesh.userData.spin = 0.1 + rand() * 0.3;
     disposeAwareAdd(group, mesh);
     shapes.push(mesh);
   }
   group.userData.amberShapes = shapes;
+
+  // Pylony/kolumny - w przeciwieństwie do unoszących się kształtów, te
+  // faktycznie "stoją" i są zakopane pod posadzką.
+  const columnCount = 22;
+  for (let i = 0; i < columnCount; i++) {
+    const angle = (i / columnCount) * Math.PI * 2 + rand() * 0.1;
+    const radius = 70 + rand() * 45;
+    const visibleHeight = 22 + rand() * 22;
+    const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 20, 50);
+    const geometry = new THREE.CylinderGeometry(2, 2.6, totalHeight, 12);
+    const material = new THREE.MeshBasicMaterial({
+      color: rand() < 0.5 ? 0xff9ecf : 0xffcf8a, wireframe: true, transparent: true, opacity: 0.45, fog: true
+    });
+    const col = new THREE.Mesh(geometry, material);
+    col.position.set(Math.cos(angle) * radius, centerY, Math.sin(angle) * radius);
+    disposeAwareAdd(group, col);
+  }
 
   return group;
 }
@@ -393,27 +531,35 @@ function updateAmberBackground(group, elapsed, deltaTime) {
 // Kanciaste bryły lodu (ośmiościany/stożki) w chłodnej granatowo-białej
 // palecie, z jaśniejszym, świecącym konturem (EdgesGeometry) na każdej -
 // to jest właśnie "cyberpunkowy" akcent na naturalnym motywie lodowca.
-// Plus powoli opadający śnieg (THREE.Points, animowany w update()).
+// Zanurzone głębiej pod posadzkę (cylinder) niż wcześniej, plus powoli
+// opadający śnieg (THREE.Points, animowany w update()).
 function buildGlacierBackground() {
   const rand = makeRand(5555);
   const group = new THREE.Group();
 
-  const count = 60;
+  const count = 85;
   for (let i = 0; i < count; i++) {
     const isOcta = rand() < 0.5;
+    const visibleHeight = isOcta ? (12 + rand() * 24) : (14 + rand() * 30);
     const geometry = isOcta
       ? new THREE.OctahedronGeometry(6 + rand() * 14, 0)
-      : new THREE.ConeGeometry(5 + rand() * 10, 14 + rand() * 30, 5);
+      : new THREE.ConeGeometry(5 + rand() * 10, visibleHeight, 5);
     const color = rand() < 0.7 ? 0x1a3550 : 0x0d1f30;
     const material = new THREE.MeshBasicMaterial({ color, fog: true });
     const mesh = new THREE.Mesh(geometry, material);
 
     const angle = rand() * Math.PI * 2;
-    const radius = 90 + rand() * 190;
-    const height = geometry.parameters.height || (10 + rand() * 20);
-    mesh.position.set(Math.cos(angle) * radius, height / 2 - 0.55, Math.sin(angle) * radius);
+    const radius = 90 + rand() * 220;
+    const px = Math.cos(angle) * radius, pz = Math.sin(angle) * radius;
+    // Efekt cylindra: rozciągamy bryłę w dół (skala Y > 1, środek geometrii
+    // przesunięty niżej), więc więcej jej masy ciągnie się pod posadzkę
+    // zamiast kończyć się dokładnie na jej poziomie.
+    const buriedExtra = 15 + rand() * 40;
+    const totalHeight = visibleHeight + buriedExtra;
+    const yScale = totalHeight / visibleHeight;
+    mesh.position.set(px, (visibleHeight - buriedExtra) / 2 - 0.55, pz);
     mesh.rotation.set(rand() * 0.3, rand() * Math.PI, rand() * 0.3);
-    mesh.scale.set(0.7 + rand() * 0.6, 1, 0.7 + rand() * 0.6);
+    mesh.scale.set(0.7 + rand() * 0.6, yScale, 0.7 + rand() * 0.6);
     disposeAwareAdd(group, mesh);
 
     const edges = new THREE.EdgesGeometry(geometry);
@@ -425,15 +571,15 @@ function buildGlacierBackground() {
     disposeAwareAdd(group, edgeLines);
   }
 
-  const snowCount = 300;
+  const snowCount = 340;
   const snowGeometry = new THREE.BufferGeometry();
   const positions = new Float32Array(snowCount * 3);
   const velocities = new Float32Array(snowCount);
   for (let i = 0; i < snowCount; i++) {
     const angle = rand() * Math.PI * 2;
-    const radius = 20 + rand() * 260;
+    const radius = 20 + rand() * 300;
     positions[i * 3] = Math.cos(angle) * radius;
-    positions[i * 3 + 1] = rand() * 150;
+    positions[i * 3 + 1] = rand() * 160;
     positions[i * 3 + 2] = Math.sin(angle) * radius;
     velocities[i] = 3 + rand() * 5;
   }
@@ -457,7 +603,7 @@ function updateGlacierBackground(group, elapsed, deltaTime) {
   const positions = snow.geometry.attributes.position.array;
   for (let i = 0; i < velocities.length; i++) {
     positions[i * 3 + 1] -= velocities[i] * deltaTime;
-    if (positions[i * 3 + 1] < -1) positions[i * 3 + 1] = 150;
+    if (positions[i * 3 + 1] < -1) positions[i * 3 + 1] = 160;
   }
   snow.geometry.attributes.position.needsUpdate = true;
 }
@@ -468,7 +614,7 @@ function updateGlacierBackground(group, elapsed, deltaTime) {
 // klimatu (matrix: bez mgły w ogóle, ostre krawędzie jak w filmie; glacier:
 // gęściej, jak zamglona, mroźna dal).
 export const THEME_BACKGROUNDS = {
-  classic: { build: buildClassicBackground, fogDensity: 0.004 },
+  classic: { build: buildClassicBackground, fogDensity: 0.004, update: updateClassicBackground },
   synthwave: { build: buildSynthwaveBackground, fogDensity: 0.0035 },
   matrix: { build: buildMatrixBackground, fogDensity: 0.0, update: updateMatrixBackground },
   amber: { build: buildAmberBackground, fogDensity: 0.0035, update: updateAmberBackground },
