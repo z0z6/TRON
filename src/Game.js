@@ -500,7 +500,7 @@ export class Game {
       this.player.hasShield = false;
       this.player.isGhost = false;
       this.player.mesh.material.opacity = 1.0;
-      this.player.mesh.material.emissiveIntensity = 0.5;
+      this.player.mesh.material.emissiveIntensity = 2.0;
       this.playerTrailMesh.start(this.player.position, this.player.direction);
     }
     
