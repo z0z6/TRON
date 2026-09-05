@@ -47,7 +47,28 @@ renderer.setPixelRatio(window.devicePixelRatio);
 // - patrz orientation-lock w index.html), a nie bezpośrednio do <body>, żeby
 // motocykl nigdy nie jeździł "pod" D-Padem/klawiszami funkcyjnymi.
 (document.getElementById('gameCanvasWrap') || document.body).appendChild(renderer.domElement);
+// --- Post-processing: bloom na neonach (ślady, motocykl, siatka) ---
+// UnrealBloomPass rozjaśnia i "rozlewa" najjaśniejsze piksele klatki - przy
+// ciemnym tle i jasnych, addytywnie mieszanych kolorach neonów (Trail.js,
+// grid.frag) daje efekt świecenia bez zmiany ani jednego materiału w grze.
+const composer = new EffectComposer(renderer);
+composer.setSize(initialSize.width, initialSize.height);
+composer.setPixelRatio(window.devicePixelRatio);
 
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(initialSize.width, initialSize.height),
+  0.9,   // strength - siła poświaty
+  0.5,   // radius - promień rozmycia
+  0.15   // threshold - im niżej, tym więcej rzeczy zaczyna świecić
+);
+composer.addPass(bloomPass);
+
+// OutputPass dba o poprawne kodowanie kolorów/tone mapping na wyjściu -
+// bez tego bloom potrafi "wypłukać" kolory.
+composer.addPass(new OutputPass());
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
 
