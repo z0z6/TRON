@@ -23,7 +23,7 @@ export class AI {
     const material = new THREE.MeshStandardMaterial({
       color: this.color,
       emissive: this.color,
-      emissiveIntensity: 0.5
+      emissiveIntensity: 2.0 // spójne z graczem (Game.js) - obaj mają tak samo świecić
     });
     
     this.mesh = new THREE.Mesh(geometry, material);
