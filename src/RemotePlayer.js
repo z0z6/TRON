@@ -28,9 +28,9 @@ export class RemotePlayer {
 
     const geometry = new THREE.BoxGeometry(1, 0.5, 2);
     const material = new THREE.MeshStandardMaterial({
-      color,
+      color: color,
       emissive: color,
-      emissiveIntensity: 0.5
+      emissiveIntensity: 2.0
     });
     this.mesh = new THREE.Mesh(geometry, material);
 
