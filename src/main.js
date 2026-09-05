@@ -80,6 +80,7 @@ const environment = new SynthwaveEnvironment(scene);
 
 const grid = new Grid(90, 45); // dopasowane do rzeczywistej granicy planszy (±45, patrz Game.js/AI.js)
 grid.setColor(hexToNum(initialTheme.p1));
+grid.setGlowColors(hexToNum(initialTheme.p1), hexToNum(initialTheme.p2));
 scene.add(grid.mesh);
 
 const game = new Game(scene, camera);
@@ -95,6 +96,7 @@ window.addEventListener('tron-theme-change', (e) => {
   if (!theme) return;
   scene.background = new THREE.Color(hexToNum(theme.bg));
   grid.setColor(hexToNum(theme.p1));
+  grid.setGlowColors(hexToNum(theme.p1), hexToNum(theme.p2));
   game.applyThemeColors(hexToNum(theme.p1), hexToNum(theme.p2));
 });
 
@@ -267,6 +269,10 @@ function animate(currentTime) {
   lastTime = currentTime;
   
   const timeInSeconds = currentTime * 0.001;
+  grid.updateRacerPositions(
+    game.player ? game.player.position : null,
+    game.opponent ? game.opponent.position : null
+  );
   grid.update(timeInSeconds);
   
   game.update(deltaTime);
