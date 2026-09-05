@@ -35,8 +35,21 @@
                dla każdej strony (względem rozmiaru elementu, który tam stoi),
                więc D-Pad może być większy niż klawisze funkcyjne bez
                marnowania miejsca po stronie, gdzie stoi coś mniejszego. */
+            /* Przyciski skrętu (lewo/prawo) - w 3D funkcjonalnie używane są
+               TYLKO te dwa (bez cofania/przyspieszania jak w 2D), więc mają
+               własny, niezależny rozmiar zamiast dziedziczyć po starym
+               układzie 3x3 (--dpad-size), gdzie realny przycisk to było
+               tylko 1/3 tamtej siatki. Wysokość: 2x względem starego
+               rozmiaru przycisku (dpad-size/3). Szerokość: 1.1x względem
+               starego rozmiaru. */
             --dpad-size: clamp(120px, calc(var(--vp-h) * 0.38), 165px);
-            --side-margin-right: calc(var(--dpad-size) + 3px);
+            --turn-btn-h: calc(var(--dpad-size) / 3 * 2);
+            --turn-btn-w: calc(var(--dpad-size) / 3 * 1.1);
+            /* Margines prawy zmniejszony o 25% względem poprzedniej wartości
+               (dpad-size + 3px) - odzyskana przestrzeń oddana polu gry przez
+               #gameCanvasWrap (patrz jego inset niżej), które już liczy się
+               względem tej samej zmiennej. */
+            --side-margin-right: calc((var(--dpad-size) + 3px) * 0.75);
             /* Klawisze funkcyjne - 75% poprzedniego rozmiaru (mniejsze), co
                automatycznie zwęża lewy margines i oddaje tę przestrzeń polu
                gry. */
@@ -163,6 +176,127 @@
         #achievementToast .icon { font-size: 28px; }
         #achievementToast .name { font-weight: bold; font-size: 15px; color: #ffd24a; }
         #achievementToast .desc { font-size: 13px; color: #d8c79a; }
+
+        /* === EKRAN PODSUMOWANIA RUNDY (wynik, statystyki, osiągnięcia,
+           rekordy) - pokazywany przez showGameOverOverlay() w main.js po
+           każdej zakończonej rundzie. === */
+        #gameOverOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            align-items: center;
+            justify-content: center;
+            background: rgba(3, 5, 12, 0.82);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #e0f7fc;
+            padding: 16px;
+        }
+
+        #gameOverOverlay.show { display: flex; }
+
+        #gameOverOverlay .panel {
+            width: min(420px, 100%);
+            max-height: 90vh;
+            overflow-y: auto;
+            background: linear-gradient(160deg, rgba(10, 14, 28, 0.97), rgba(6, 8, 18, 0.97));
+            border: 1px solid rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
+            border-radius: 14px;
+            padding: 22px 24px;
+            box-shadow: 0 0 40px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.25);
+            text-align: center;
+        }
+
+        #gameOverOverlay h2 {
+            font-size: clamp(1.4rem, 5vw, 1.8rem);
+            letter-spacing: 3px;
+            margin-bottom: 4px;
+        }
+
+        #gameOverOverlay h2.won { color: var(--theme-p1); text-shadow: 0 0 20px var(--theme-p1); }
+        #gameOverOverlay h2.lost { color: var(--theme-p2); text-shadow: 0 0 20px var(--theme-p2); }
+
+        #gameOverOverlay .final-score {
+            font-size: clamp(2.2rem, 9vw, 3rem);
+            font-weight: bold;
+            margin: 6px 0 2px;
+        }
+
+        #gameOverOverlay .record-badge {
+            display: none;
+            font-size: 0.8rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: #ffd24a;
+            text-shadow: 0 0 10px rgba(255, 210, 74, 0.8);
+            margin-bottom: 10px;
+        }
+
+        #gameOverOverlay .record-badge.show { display: block; }
+
+        #gameOverOverlay .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 16px;
+            margin: 14px 0;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        #gameOverOverlay .stats-grid .label { color: #8fa; opacity: 0.65; }
+        #gameOverOverlay .stats-grid .value { font-weight: bold; text-align: right; }
+
+        #gameOverOverlay .achievements-new {
+            margin: 12px 0;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        #gameOverOverlay .achievements-new .row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+            padding: 6px 0;
+        }
+
+        #gameOverOverlay .achievements-new .row .icon { font-size: 22px; }
+        #gameOverOverlay .achievements-new .row .name { font-weight: bold; font-size: 0.85rem; color: #ffd24a; }
+        #gameOverOverlay .achievements-new .row .desc { font-size: 0.72rem; color: #d8c79a; }
+
+        #gameOverOverlay .lifetime {
+            margin-top: 14px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            font-size: 0.72rem;
+            color: rgba(224, 247, 252, 0.6);
+        }
+
+        #gameOverOverlay .actions {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        #gameOverOverlay button {
+            padding: 10px 22px;
+            border-radius: 30px;
+            border: 2px solid var(--theme-p1);
+            background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.15);
+            color: var(--theme-p1);
+            font-weight: bold;
+            letter-spacing: 1px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        #gameOverOverlay .countdown {
+            margin-top: 10px;
+            font-size: 0.68rem;
+            color: rgba(224, 247, 252, 0.45);
+        }
 
         /* === PRZEŁĄCZNIK MOTYWU KOLORYSTYCZNEGO === */
         .theme-picker {
@@ -386,13 +520,17 @@
            lewo/prawo (bez cofania/przyspieszania) - górna/dolna komórka
            siatki zostaje pusta, ale sam D-Pad (rozmiar, wygląd, pozycja w
            prawej strefie) jest identyczny jak w 2D. */
+        /* Przyciski skrętu - lewo/prawo, obok siebie. W 3D (w przeciwieństwie
+           do 2D) dostępny funkcjonalnie jest tylko skręt, więc to prosty
+           rząd flex zamiast siatki 3x3 - każdy przycisk ma teraz WŁASNY,
+           większy rozmiar (patrz --turn-btn-w/--turn-btn-h w :root), a nie
+           1/3 wspólnego kontenera jak wcześniej. */
         .dpad {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(3, 1fr);
-            gap: 1px;
-            width: var(--dpad-size);
-            height: var(--dpad-size);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: var(--side-margin-right);
             pointer-events: auto;
         }
 
@@ -400,6 +538,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            width: var(--turn-btn-w);
+            height: var(--turn-btn-h);
+            flex-shrink: 0;
             background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.15);
             border: 2px solid rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.6);
             border-radius: 10px;
@@ -414,9 +555,6 @@
             background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
             box-shadow: 0 0 20px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.8);
         }
-
-        .dpad-left { grid-column: 1; grid-row: 2; }
-        .dpad-right { grid-column: 3; grid-row: 2; }
 
         /* Klawisze funkcyjne - komponent WSPÓLNY z wersją 2D, w lewej strefie. */
         .fn-controls {
@@ -735,6 +873,25 @@
         <div>
             <div class="name" id="achievementName"></div>
             <div class="desc" id="achievementDesc"></div>
+        </div>
+    </div>
+
+    <div id="gameOverOverlay">
+        <div class="panel">
+            <h2 id="gameOverTitle">KONIEC RUNDY</h2>
+            <div class="final-score" id="gameOverScore">0</div>
+            <div class="record-badge" id="gameOverRecordBadge">🏆 NOWY REKORD!</div>
+
+            <div class="stats-grid" id="gameOverStatsGrid"></div>
+
+            <div class="achievements-new" id="gameOverAchievements" style="display: none;"></div>
+
+            <div class="lifetime" id="gameOverLifetime"></div>
+
+            <div class="actions">
+                <button type="button" id="gameOverContinueBtn">GRAJ DALEJ</button>
+            </div>
+            <div class="countdown" id="gameOverCountdown"></div>
         </div>
     </div>
 
