@@ -32,7 +32,7 @@ export class SynthwaveEnvironment {
     // stylistyki synthwave/Tron. Wspólna dla wszystkich motywów tła.
     const geometry = new THREE.PlaneGeometry(400, 400);
     this.floorBase = new Reflector(geometry, {
-      color: 0x0a0a2e,
+      color: 0x1c1c48, // było 0x0a0a2e - jaśniejszy tint, żeby odbicie tła (słońca, gór, miasta...) było faktycznie widoczne, nie prawie czarne
       textureWidth: 1024,
       textureHeight: 1024,
       clipBias: 0.003
