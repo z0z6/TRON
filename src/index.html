@@ -207,6 +207,30 @@
             text-align: center;
         }
 
+        /* Akcenty stylu per motyw - poza samym kolorem obramowania (już
+           dynamiczny wszędzie przez --theme-p1/-p2), każdy motyw dostaje
+           własny charakter panelu podsumowania. */
+        body.theme-matrix #gameOverOverlay .panel {
+            font-family: 'Courier New', monospace;
+            background:
+                repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0px, rgba(0, 0, 0, 0.25) 1px, transparent 1px, transparent 3px),
+                linear-gradient(160deg, rgba(4, 16, 8, 0.97), rgba(2, 10, 4, 0.97));
+            border-radius: 4px;
+        }
+
+        body.theme-synthwave #gameOverOverlay .panel {
+            background: linear-gradient(160deg, rgba(28, 8, 30, 0.97), rgba(10, 4, 20, 0.97));
+        }
+
+        body.theme-amber #gameOverOverlay .panel {
+            background: linear-gradient(160deg, rgba(32, 16, 4, 0.97), rgba(16, 6, 2, 0.97));
+        }
+
+        body.theme-glacier #gameOverOverlay .panel {
+            background: linear-gradient(160deg, rgba(8, 22, 32, 0.97), rgba(4, 12, 20, 0.97));
+            border-width: 2px;
+        }
+
         #gameOverOverlay h2 {
             font-size: clamp(1.4rem, 5vw, 1.8rem);
             letter-spacing: 3px;
@@ -705,6 +729,15 @@
                 root.style.setProperty('--theme-p2-g', p2.g);
                 root.style.setProperty('--theme-p2-b', p2.b);
                 root.style.setProperty('--theme-bg', theme.bg);
+
+                // Klasa na <body> (theme-classic/theme-synthwave/...) - poza
+                // samymi kolorami (--theme-p1 itd., już podpięte wszędzie)
+                // pozwala dodać per-motyw akcenty stylu tam, gdzie sam kolor
+                // nie wystarczy - patrz np. #gameOverOverlay.panel niżej.
+                document.body.className = document.body.className
+                    .replace(/\btheme-\w+\b/g, '')
+                    .trim();
+                document.body.classList.add(`theme-${key}`);
 
                 document.querySelectorAll('.theme-option').forEach((btn) => {
                     btn.classList.toggle('active', btn.dataset.theme === key);
