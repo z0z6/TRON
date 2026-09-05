@@ -18,6 +18,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 // wszystkie motocykle (gracz/AI/przeciwnik sieciowy) współdzieliłyby jeden
 // materiał "Light" i zmiana koloru jednego zmieniałaby wszystkie na raz.
 
+const MODEL_URL = `${import.meta.env.BASE_URL}models/lightcycle/scene.gltf`;
+
 // Rozmiar modelu POLICZONY z pełnej, złożonej hierarchii węzłów (THREE.Box3
 // na wczytanej scenie) - w plikach Sketchfaba transformacje siedzą częściowo
 // w węzłach pośrednich (widoczna macierz ze skalą x0.01 na jednym z nich),
