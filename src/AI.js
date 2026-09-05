@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Trail } from './Trail.js';
+import { createLightCycleMesh } from './LightCycleModel.js';
 
 export class AI {
   constructor(scene, startPosition, color = 0xff00ff, difficulty = 'medium') {
@@ -19,14 +20,7 @@ export class AI {
   }
 
   createMesh() {
-    const geometry = new THREE.BoxGeometry(1, 0.5, 2);
-    const material = new THREE.MeshStandardMaterial({
-      color: this.color,
-      emissive: this.color,
-      emissiveIntensity: 1.1 // spójne z graczem (Game.js) - obaj mają tak samo świecić
-    });
-    
-    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh = createLightCycleMesh(this.color);
     this.mesh.position.copy(this.position);
     this.scene.add(this.mesh);
     
@@ -218,8 +212,13 @@ export class AI {
 
   dispose() {
     this.scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    this.mesh.material.dispose();
+    // this.mesh to teraz THREE.Group (kilkanaście brył - patrz
+    // LightCycleModel.js), nie pojedynczy THREE.Mesh jak wcześniej -
+    // trzeba posprzątać geometrię/materiał KAŻDEJ części z osobna.
+    this.mesh.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
     this.trail.dispose();
   }
 }

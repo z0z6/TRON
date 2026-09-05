@@ -4,6 +4,7 @@ import { AudioManager } from './AudioManager.js';
 import { CameraController } from './CameraController.js';
 import { AI } from './AI.js';
 import { RemotePlayer } from './RemotePlayer.js';
+import { createLightCycleMesh } from './LightCycleModel.js';
 import { Trail } from './Trail.js';
 import { PowerUpSystem } from './PowerUpSystem.js';
 import { ScoringSystem } from './ScoringSystem.js';
@@ -54,16 +55,8 @@ export class Game {
   }
 
   initPlayer(startPosition = new THREE.Vector3(-15, 0, 0), color = 0x00ffff) {
-    const geometry = new THREE.BoxGeometry(1, 0.5, 2);
-    const material = new THREE.MeshStandardMaterial({
-      color: color,
-      emissive: color,
-      emissiveIntensity: 1.1, // >1 celowo - przekracza próg bloomu (main.js), motocykl ma "świecić"
-      transparent: true
-    });
-    
     this.player = {
-      mesh: new THREE.Mesh(geometry, material),
+      mesh: createLightCycleMesh(color),
       position: startPosition.clone(),
       direction: new THREE.Vector3(1, 0, 0),
       speed: 10,

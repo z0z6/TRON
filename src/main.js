@@ -349,7 +349,25 @@ document.getElementById('fnLobby3d').addEventListener('touchstart', (e) => {
   });
 }, { passive: false });
 
+// Przycisk Esc / klawisz Escape - wyjście do ekranu wyboru trybu
+// (../index.html). Potwierdzenie tylko wtedy, gdy runda faktycznie trwa -
+// na ekranie startowym/po końcu rundy nie ma czego chronić przed
+// przypadkową utratą postępu.
+function exitToMenu() {
+  if (game.isStarted && !game.gameOver) {
+    if (!confirm('Opuścić grę i wrócić do menu?')) return;
+  }
+  window.location.href = '../index.html';
+}
+document.getElementById('escBtn').addEventListener('click', exitToMenu);
+
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    exitToMenu();
+    return;
+  }
+
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
     game.handlePlayerInput('turnLeft');
   }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Trail } from './Trail.js';
+import { createLightCycleMesh } from './LightCycleModel.js';
 
 /**
  * Przeciwnik sterowany przez sieć - odpowiednik AI.js dla trybu multiplayer.
@@ -26,13 +27,7 @@ export class RemotePlayer {
     this.speed = 10;
     this.visible = true;
 
-    const geometry = new THREE.BoxGeometry(1, 0.5, 2);
-    const material = new THREE.MeshStandardMaterial({
-      color: color,
-      emissive: color,
-      emissiveIntensity: 1.1
-    });
-    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh = createLightCycleMesh(color);
 
     this.position = startPosition.clone();
     this.direction = new THREE.Vector3(-1, 0, 0);
@@ -110,8 +105,12 @@ export class RemotePlayer {
 
   dispose() {
     this.scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    this.mesh.material.dispose();
+    // this.mesh to teraz THREE.Group (patrz LightCycleModel.js) - jak w
+    // AI.js, trzeba posprzątać geometrię/materiał każdej części z osobna.
+    this.mesh.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
     this.trail.dispose();
   }
 }
