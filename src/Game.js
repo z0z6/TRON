@@ -58,7 +58,7 @@ export class Game {
     const material = new THREE.MeshStandardMaterial({
       color: color,
       emissive: color,
-      emissiveIntensity: 0.5,
+      emissiveIntensity: 2.0, // >1 celowo - przekracza próg bloomu (main.js), motocykl ma "świecić"
       transparent: true
     });
     
