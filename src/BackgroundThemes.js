@@ -27,14 +27,59 @@ function disposeAwareAdd(group, obj) {
 // To, co wcześniej było na stałe w Environment.js - dwie warstwy
 // prostopadłościennych "serwerowni" w pierścieniu wokół areny, część z
 // cienkimi antenami, plus drobne, świecące "diody danych" na fasadach.
+// Generuje teksturę "fasady z oknami" (canvas) - współdzielona przez
+// wszystkie budynki danej warstwy (InstancedMesh ma jeden materiał na
+// wszystkie instancje), ale każdy budynek dostaje inny fragment/gęstość
+// przez własny texture.repeat... a że InstancedMesh nie pozwala na
+// per-instance repeat, kompensujemy to różnicami w skali budynków (patrz
+// addLayer) i losowym wzorem okien w samej teksturze.
+function buildWindowFacadeTexture(rand) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0b0b26';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const cols = 6, rows = 16;
+  const cw = canvas.width / cols, ch = canvas.height / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (rand() < 0.5) continue; // nie każde okno "istnieje" - nieregularna fasada
+      const lit = rand() < 0.55;
+      ctx.fillStyle = lit ? 'rgba(150,225,255,0.95)' : 'rgba(40,55,95,0.6)';
+      ctx.fillRect(c * cw + 1, r * ch + 1, cw - 2, ch - 2);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 5);
+  return texture;
+}
+
 function buildClassicBackground() {
   const rand = makeRand(1337);
   const group = new THREE.Group();
+  const facadeTexture = buildWindowFacadeTexture(rand);
 
   function addLayer({ count, radiusMin, radiusMax, heightMin, heightMax, color, spires }) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshBasicMaterial({ color, fog: true });
+    // MeshStandardMaterial zamiast MeshBasicMaterial - reaguje na światła
+    // sceny (ambient + directional z main.js), więc każda ściana budynku
+    // dostaje inny odcień zależnie od kąta do światła (góra jaśniejsza,
+    // boki w cieniu) zamiast być jednolitą, płaską plamą koloru. Tekstura
+    // okien (map) dokłada realny detal powierzchni.
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      map: facadeTexture,
+      roughness: 0.75,
+      metalness: 0.15,
+      emissive: color,
+      emissiveIntensity: 0.15, // odrobina "własnego" blasku, żeby ciemna strona budynku nie ginęła całkiem w czerni
+      fog: true
+    });
     const layer = new THREE.InstancedMesh(geometry, material, count);
+    layer.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     const dummy = new THREE.Object3D();
 
     let spireMesh, spireCount = 0;
@@ -46,6 +91,11 @@ function buildClassicBackground() {
       });
       spireMesh = new THREE.InstancedMesh(sg, sm, count);
     }
+
+    // Delikatna, losowa wariacja jasności KAŻDEGO budynku (instanceColor -
+    // mnoży kolor bazowy materiału per-instancja) - bez tego, mimo
+    // oświetlenia, całe pole wciąż wyglądałoby zbyt jednolicie.
+    const baseColor = new THREE.Color(color);
 
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + rand() * 0.15;
@@ -60,6 +110,7 @@ function buildClassicBackground() {
       dummy.rotation.y = rand() * Math.PI;
       dummy.updateMatrix();
       layer.setMatrixAt(i, dummy.matrix);
+      layer.setColorAt(i, baseColor.clone().multiplyScalar(0.75 + rand() * 0.5));
 
       if (spires && rand() < 0.35) {
         const sh = 6 + rand() * 14;
@@ -71,6 +122,7 @@ function buildClassicBackground() {
         spireCount++;
       }
     }
+    layer.instanceColor.needsUpdate = true;
 
     disposeAwareAdd(group, layer);
     if (spires) {
@@ -110,30 +162,77 @@ function buildClassicBackground() {
   return group;
 }
 
+// Generuje teksturę słońca (canvas, radialny gradient) - daje realne
+// wrażenie "kuli światła" zamiast płaskiego jednokolorowego kółka, i
+// opcjonalnie wypala w niej poziome pasy (synthwave - "przysłonięte" słońce).
+function buildSunTexture(rand, { core, mid, stripes }) {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const c = size / 2;
+
+  const gradient = ctx.createRadialGradient(c, c, 0, c, c, c);
+  gradient.addColorStop(0, core);
+  gradient.addColorStop(0.55, mid);
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(c, c, c, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (stripes) {
+    ctx.fillStyle = 'rgba(8,3,18,0.92)';
+    for (let i = 0; i < 6; i++) {
+      const y = size * (0.28 + rand() * 0.52);
+      ctx.fillRect(0, y, size, 4 + rand() * 7);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}
+
+// Buduje słońce + JEGO WŁASNE, jawnie zaprojektowane odbicie - celowo NIE
+// polegamy na automatycznym lustrze podłogi (Environment.js/Reflector) dla
+// tego elementu, bo addytywny blending w połączeniu z normalnym blendingiem
+// reflektora dawał efekt "wiszącej", oderwanej od horyzontu plamy. Zamiast
+// tego odbicie to osobny mesh: odwrócony w pionie, wyraźnie przygaszony,
+// ustawiony dokładnie tyle samo pod poziomem podłogi, ile słońce jest nad
+// nim - czyli geometrycznie poprawne, ale w pełni kontrolowane.
+function buildSunWithReflection(rand, { core, mid, stripes, radius, skyY, opacity }) {
+  const group = new THREE.Group();
+  const floorY = -0.55; // ta sama wysokość co Reflector w Environment.js
+  const texture = buildSunTexture(rand, { core, mid, stripes });
+
+  const material = new THREE.MeshBasicMaterial({
+    map: texture, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
+  });
+  const sun = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2), material);
+  sun.position.set(0, skyY, -260);
+  group.add(sun);
+
+  const reflection = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2), material.clone());
+  reflection.material.opacity = opacity * 0.3;
+  reflection.scale.y = -1;
+  reflection.position.set(0, 2 * floorY - skyY, -260);
+  group.add(reflection);
+
+  return group;
+}
+
 // --- SYNTHWAVE: low-poly góry z linii + kultowe zachodzące słońce --------
 function buildSynthwaveBackground() {
   const rand = makeRand(4242);
   const group = new THREE.Group();
 
-  const sunMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff5fa8, transparent: true, opacity: 0.85,
-    blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
-  });
-  const sun = new THREE.Mesh(new THREE.CircleGeometry(70, 48), sunMaterial);
-  sun.position.set(0, 55, -260);
-  disposeAwareAdd(group, sun);
-
-  // Poziome, ciemne pasy "przez" tarczę słońca - kultowy detal z grafik
-  // synthwave (słońce jakby prążkowane/przysłonięte).
-  const stripeMaterial = new THREE.MeshBasicMaterial({ color: 0x1a0a2e, fog: false });
-  for (let i = 0; i < 7; i++) {
-    const y = -50 + i * 16 + rand() * 4;
-    const w = Math.sqrt(Math.max(0, 70 * 70 - y * y)) * 2;
-    if (w < 5) continue;
-    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(w, 5 + rand() * 3), stripeMaterial);
-    stripe.position.set(0, 55 + y, -259.5);
-    disposeAwareAdd(group, stripe);
-  }
+  // Jedno, wyraźne, ale niedominujące słońce (umiarkowana opacity zamiast
+  // 0.85) - z odbiciem na podłodze (patrz buildSunWithReflection wyżej).
+  disposeAwareAdd(group, buildSunWithReflection(rand, {
+    core: '#fff0f8', mid: '#ff5fa8', stripes: true, radius: 60, skyY: 50, opacity: 0.55
+  }));
 
   // Góry - kontur (LineSegments, nie wypełnione trójkąty), żeby wyglądały
   // jak fluorescencyjne linie na tle ciemnego nieba, nie pełne bryły.
@@ -165,78 +264,85 @@ function buildSynthwaveBackground() {
 }
 
 // --- MATRIX: ściany cyfrowego deszczu -------------------------------------
-// Przybliżenie spadającego kodu bez renderowania prawdziwych znaków -
-// drobne, jasne prostokąty w pionowych "kolumnach", z jaśniejszą "głową"
-// każdej smugi i gasnącym ogonem, animowane w update() przez bezpośrednią
-// mutację translacji Y w macierzy instancji (tanie - bez decompose/recompose).
+// Prawdziwe znaki (cyfry/katakana-podobne symbole) wypalone w jednej,
+// pionowej teksturze canvas, powielanej (RepeatWrapping) na wysokich,
+// wąskich płaszczyznach ustawionych w pierścieniu wokół areny. Animacja
+// "spadania" to tylko przesuwanie texture.offset.y co klatkę - tanie, bez
+// dotykania geometrii. Każda kolumna to DWIE płaszczyzny na krzyż (90°),
+// żeby była widoczna z dowolnego kąta kamery, nie tylko "na wprost".
+function buildMatrixCharacterTexture(rand) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '30px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const chars = '01アイウエオカキクケコサシスセソタチツテト';
+  for (let y = 16; y < canvas.height; y += 32) {
+    const ch = chars[Math.floor(rand() * chars.length)];
+    const bright = rand();
+    ctx.fillStyle = bright < 0.15 ? '#eaffea' : '#3dff6e';
+    ctx.globalAlpha = 0.5 + rand() * 0.5;
+    ctx.fillText(ch, canvas.width / 2, y);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
 function buildMatrixBackground() {
   const rand = makeRand(7331);
   const group = new THREE.Group();
+  const baseTexture = buildMatrixCharacterTexture(rand);
 
-  const columnsCount = 60;
-  const dropsPerColumn = 22;
-  const geometry = new THREE.PlaneGeometry(1, 1);
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.9,
-    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-    side: THREE.DoubleSide, vertexColors: true
-  });
-  const drops = new THREE.InstancedMesh(geometry, material, columnsCount * dropsPerColumn);
-  drops.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-
+  const columnsCount = 46;
   const columns = [];
-  const dummy = new THREE.Object3D();
-  let idx = 0;
+
   for (let c = 0; c < columnsCount; c++) {
     const angle = (c / columnsCount) * Math.PI * 2 + rand() * 0.05;
-    const radius = 95 + rand() * 160;
-    const speed = 20 + rand() * 30;
-    const baseColor = rand() < 0.15 ? new THREE.Color(0xccffcc) : new THREE.Color(0x22ff55);
-    columns.push({ radius, angle, speed, startIdx: idx });
+    const radius = 90 + rand() * 170;
+    const height = 55 + rand() * 85;
 
-    for (let d = 0; d < dropsPerColumn; d++) {
-      const y = -20 + d * 9 + rand() * 4;
-      dummy.position.set(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
-      dummy.rotation.y = -angle; // zwrócone mniej więcej w stronę areny
-      const s = 1.2 + rand() * 0.8;
-      dummy.scale.set(s, s * 1.4, 1);
-      dummy.updateMatrix();
-      drops.setMatrixAt(idx, dummy.matrix);
-      const fade = 1 - d / dropsPerColumn; // "głowa" smugi jaśniejsza, ogon gaśnie
-      drops.setColorAt(idx, baseColor.clone().multiplyScalar(0.4 + fade * 1.4));
-      idx++;
-    }
+    // Własny klon tekstury per kolumna - każda potrzebuje NIEZALEŻNEGO
+    // texture.offset.y (prędkość/faza), więc nie może być to jeden
+    // współdzielony obiekt Texture (offset jest właściwością tekstury, nie
+    // materiału).
+    const texture = baseTexture.clone();
+    texture.needsUpdate = true;
+    texture.repeat.set(1, height / 16);
+    texture.offset.y = rand();
+
+    const material = new THREE.MeshBasicMaterial({
+      map: texture, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
+    });
+    const geometry = new THREE.PlaneGeometry(7, height);
+
+    const cross = new THREE.Group();
+    const plane1 = new THREE.Mesh(geometry, material);
+    const plane2 = new THREE.Mesh(geometry, material);
+    plane2.rotation.y = Math.PI / 2;
+    cross.add(plane1, plane2);
+    cross.position.set(Math.cos(angle) * radius, height / 2 - 0.55, Math.sin(angle) * radius);
+    disposeAwareAdd(group, cross);
+
+    columns.push({ texture, speed: 0.12 + rand() * 0.3 });
   }
-  drops.instanceColor.needsUpdate = true;
-  disposeAwareAdd(group, drops);
 
   group.userData.matrixColumns = columns;
-  group.userData.matrixMesh = drops;
-  group.userData.dropsPerColumn = dropsPerColumn;
-  group.userData.tmpMatrix = new THREE.Matrix4();
-
   return group;
 }
 
 function updateMatrixBackground(group, elapsed, deltaTime) {
-  const { matrixColumns, matrixMesh, dropsPerColumn, tmpMatrix } = group.userData;
-  if (!matrixMesh) return;
-  const RANGE = 220; // wysokość, po jakiej smuga zawija się z powrotem na górę
-  for (const col of matrixColumns) {
-    const dy = col.speed * deltaTime;
-    for (let d = 0; d < dropsPerColumn; d++) {
-      const i = col.startIdx + d;
-      matrixMesh.getMatrixAt(i, tmpMatrix);
-      // Translacja Y zawsze siedzi w elements[13] niezależnie od
-      // rotacji/skali (kolejność TRS) - taniej niż pełny decompose/recompose
-      // dla ~1300 instancji na klatkę.
-      let y = tmpMatrix.elements[13] - dy;
-      if (y < -30) y += RANGE;
-      tmpMatrix.elements[13] = y;
-      matrixMesh.setMatrixAt(i, tmpMatrix);
-    }
+  const columns = group.userData.matrixColumns;
+  if (!columns) return;
+  for (const col of columns) {
+    col.texture.offset.y -= col.speed * deltaTime;
   }
-  matrixMesh.instanceMatrix.needsUpdate = true;
 }
 
 // --- AMBER: krajobraz vaporwave --------------------------------------------
@@ -247,13 +353,9 @@ function buildAmberBackground() {
   const rand = makeRand(9001);
   const group = new THREE.Group();
 
-  const sunMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffb347, transparent: true, opacity: 0.8,
-    blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
-  });
-  const sun = new THREE.Mesh(new THREE.CircleGeometry(65, 48), sunMaterial);
-  sun.position.set(0, 60, -250);
-  disposeAwareAdd(group, sun);
+  disposeAwareAdd(group, buildSunWithReflection(rand, {
+    core: '#fff6e0', mid: '#ffb347', stripes: false, radius: 58, skyY: 52, opacity: 0.55
+  }));
 
   const shapes = [];
   const shapesCount = 16;
@@ -337,7 +439,7 @@ function buildGlacierBackground() {
   }
   snowGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const snowMaterial = new THREE.PointsMaterial({
-    color: 0xdff6ff, size: 1.4, transparent: true, opacity: 0.8, fog: false, depthWrite: false
+    color: 0xdff6ff, size: 0.35, transparent: true, opacity: 0.8, fog: false, depthWrite: false
   });
   const snow = new THREE.Points(snowGeometry, snowMaterial);
   disposeAwareAdd(group, snow);
