@@ -39,6 +39,140 @@
         position: relative;
     }
 
+    /* ================================================================
+       EKRAN POWITALNY ("okładka") - pełnoekranowa sekwencja rozruchowa
+       pokazywana RAZ na sesję (sessionStorage), zanim pojawi się wybór
+       trybu. Pomijalna dotykiem/kliknięciem/klawiszem - nikt nie jest
+       zmuszony czekać. Przy prefers-reduced-motion cała sekwencja jest
+       natychmiastowa (patrz media query na dole tego bloku).
+       ================================================================ */
+    #introScreen {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+        cursor: pointer;
+        transition: opacity 0.6s ease;
+    }
+
+    #introScreen.hide {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .intro-grid {
+        position: absolute;
+        inset: -20% -50% 0 -50%;
+        background-image:
+            linear-gradient(rgba(0, 243, 255, 0.35) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 243, 255, 0.35) 1px, transparent 1px);
+        background-size: 44px 44px;
+        transform: perspective(300px) rotateX(64deg) scale(0.85);
+        transform-origin: bottom;
+        opacity: 0;
+        animation: gridPowerOn 1.4s ease-out 0.1s forwards, floor-scroll 6s linear infinite;
+        mask-image: linear-gradient(to top, black, transparent 75%);
+        -webkit-mask-image: linear-gradient(to top, black, transparent 75%);
+    }
+
+    @keyframes gridPowerOn {
+        0%   { opacity: 0; transform: perspective(300px) rotateX(64deg) scale(0.85); }
+        100% { opacity: 1; transform: perspective(300px) rotateX(64deg) scale(1); }
+    }
+
+    .intro-logo {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .intro-line {
+        width: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--cyan), var(--magenta), transparent);
+        box-shadow: 0 0 12px 1px var(--cyan);
+        opacity: 0;
+        animation: lineExpand 0.7s ease-out 0.5s forwards;
+    }
+
+    .intro-title {
+        font-family: var(--font-display);
+        font-weight: 900;
+        font-size: clamp(3rem, 13vw, 7rem);
+        letter-spacing: 10px;
+        color: #fff;
+        text-shadow: 0 0 24px rgba(0, 243, 255, 0.7), 0 0 60px rgba(255, 0, 255, 0.35);
+        margin: 14px 0;
+        clip-path: inset(0 50% 0 50%);
+        opacity: 0;
+        animation: titleReveal 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.55s forwards;
+    }
+
+    @keyframes titleReveal {
+        0%   { clip-path: inset(0 50% 0 50%); opacity: 0; }
+        45%  { opacity: 1; }
+        100% { clip-path: inset(0 0 0 0); opacity: 1; }
+    }
+
+    .intro-subtitle {
+        font-family: var(--font-mono);
+        font-size: clamp(0.9rem, 2.5vw, 1.2rem);
+        letter-spacing: 10px;
+        color: var(--cyan);
+        opacity: 0;
+        animation: fadeIn 0.6s ease-out 1.3s forwards;
+    }
+
+    @keyframes lineExpand {
+        0%   { width: 0; opacity: 0; }
+        100% { width: min(280px, 60vw); opacity: 1; }
+    }
+
+    @keyframes fadeIn {
+        0%   { opacity: 0; transform: translateY(6px); }
+        100% { opacity: 1; transform: translateY(0); }
+    }
+
+    .intro-hint {
+        position: absolute;
+        bottom: 42px;
+        z-index: 2;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        letter-spacing: 2px;
+        color: #6fd8e8;
+        opacity: 0;
+        animation: fadeIn 0.6s ease-out 1.9s forwards, hintPulse 1.8s ease-in-out 2.5s infinite;
+    }
+
+    @keyframes hintPulse {
+        0%, 100% { opacity: 0.35; }
+        50%      { opacity: 0.9; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        #introScreen { transition: none; }
+        .intro-grid, .intro-line, .intro-title, .intro-subtitle, .intro-hint {
+            animation: none !important;
+            opacity: 1 !important;
+            clip-path: none !important;
+            width: min(280px, 60vw) !important;
+            transform: none !important;
+        }
+    }
+
+    /* ================================================================
+       EKRAN WYBORU TRYBU - istniejąca zawartość, wzbogacona o poświatę
+       horyzontu i unoszące się drobiny światła w tle.
+       ================================================================ */
+
     /* --- Sygnaturowy moment: smuga światła przelatująca raz przy wczytaniu --- */
     .boot-streak {
         position: fixed;
@@ -49,9 +183,12 @@
         background: linear-gradient(90deg, transparent, var(--cyan), transparent);
         box-shadow: 0 0 20px 2px var(--cyan);
         opacity: 0;
-        animation: streak 1.4s ease-out 0.15s 1 forwards;
         pointer-events: none;
         z-index: 1;
+    }
+
+    .boot-streak.play {
+        animation: streak 1.4s ease-out 1 forwards;
     }
 
     @keyframes streak {
@@ -63,6 +200,50 @@
 
     @media (prefers-reduced-motion: reduce) {
         .boot-streak { animation: none; display: none; }
+    }
+
+    /* Poświata "horyzontu" za siatką podłogi - te same barwy co gra (cyjan/
+       magenta), czysty CSS radial-gradient, żeby tło ekranu wyboru nie było
+       płaską czernią nad animowaną siatką. */
+    .horizon-glow {
+        position: fixed;
+        left: 50%;
+        bottom: 60px;
+        width: min(900px, 140vw);
+        height: min(900px, 140vw);
+        transform: translateX(-50%);
+        background: radial-gradient(circle, rgba(255, 0, 255, 0.16), rgba(0, 243, 255, 0.08) 42%, transparent 70%);
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    /* Drobiny światła unoszące się powoli w górę - taniutki CSS, kilka
+       sztuk wystarczy, żeby scena nie była statyczna. */
+    .mote {
+        position: fixed;
+        bottom: -10px;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 6px 1px var(--cyan);
+        opacity: 0;
+        z-index: 0;
+        pointer-events: none;
+        animation: moteRise linear infinite;
+    }
+
+    .mote:nth-child(odd) { background: var(--magenta); box-shadow: 0 0 6px 1px var(--magenta); }
+
+    @keyframes moteRise {
+        0%   { transform: translateY(0); opacity: 0; }
+        10%  { opacity: 0.8; }
+        90%  { opacity: 0.4; }
+        100% { transform: translateY(-92vh); opacity: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .mote { animation: none; display: none; }
     }
 
     .eyebrow {
@@ -229,7 +410,18 @@
 </style>
 </head>
 <body>
-    <div class="boot-streak" aria-hidden="true"></div>
+    <div id="introScreen" role="button" tabindex="0" aria-label="Pomiń ekran powitalny">
+        <div class="intro-grid" aria-hidden="true"></div>
+        <div class="intro-logo">
+            <div class="intro-line" aria-hidden="true"></div>
+            <h1 class="intro-title">TRON</h1>
+            <p class="intro-subtitle">LIGHT CYCLES</p>
+        </div>
+        <p class="intro-hint">DOTKNIJ, ABY KONTYNUOWAĆ</p>
+    </div>
+
+    <div class="horizon-glow" aria-hidden="true"></div>
+    <div class="boot-streak" id="bootStreak" aria-hidden="true"></div>
     <div class="floor" aria-hidden="true"></div>
 
     <p class="eyebrow">SYSTEM READY</p>
@@ -253,5 +445,59 @@
     </nav>
 
     <footer>z0z6 / TRON</footer>
+
+    <script>
+        // === EKRAN POWITALNY ===
+        // Pokazywany raz na sesję przeglądarki (sessionStorage) - powrót na
+        // stronę główną z gry (np. przyciskiem Esc) nie każe oglądać
+        // sekwencji rozruchowej drugi raz. Pomijalny w każdej chwili
+        // (dotyk/klik/klawisz) - nikt nie jest zmuszony czekać na animację.
+        (function () {
+            var intro = document.getElementById('introScreen');
+            var bootStreak = document.getElementById('bootStreak');
+            var alreadyShown = false;
+            try { alreadyShown = sessionStorage.getItem('tron-intro-shown') === '1'; } catch (e) {}
+
+            function finishIntro() {
+                if (intro.classList.contains('hide')) return;
+                intro.classList.add('hide');
+                bootStreak.classList.add('play');
+                try { sessionStorage.setItem('tron-intro-shown', '1'); } catch (e) {}
+                window.setTimeout(function () {
+                    intro.style.display = 'none';
+                }, 650);
+            }
+
+            if (alreadyShown) {
+                intro.style.display = 'none';
+                bootStreak.classList.add('play');
+            } else {
+                intro.addEventListener('click', finishIntro);
+                intro.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') finishIntro();
+                });
+                intro.addEventListener('touchstart', finishIntro, { passive: true });
+                window.setTimeout(finishIntro, 3400);
+            }
+        })();
+
+        // === DROBINY ŚWIATŁA ===
+        // Kilka sztuk wystarczy - powielane w pętli z losową pozycją/
+        // opóźnieniem/prędkością, żeby tło ekranu wyboru nie było statyczne.
+        (function () {
+            var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduceMotion) return;
+
+            var count = 14;
+            for (var i = 0; i < count; i++) {
+                var mote = document.createElement('div');
+                mote.className = 'mote';
+                mote.style.left = (Math.random() * 100) + 'vw';
+                mote.style.animationDuration = (9 + Math.random() * 9) + 's';
+                mote.style.animationDelay = (Math.random() * 10) + 's';
+                document.body.appendChild(mote);
+            }
+        })();
+    </script>
 </body>
 </html>
