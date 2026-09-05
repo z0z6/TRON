@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 
 /**
  * Otoczenie areny w stylu synthwave/outrun - nieprzezroczysta podłoga pod
