@@ -21,6 +21,10 @@ export class Game {
     this.powerUpSystem = new PowerUpSystem(scene);
     this.scoringSystem = new ScoringSystem();
     this.achievementSystem = new AchievementSystem();
+    // Wywoływane raz na koniec każdej rundy (przegrana/wygrana), zanim
+    // ruszy auto-restart - main.js podpina tu wyświetlenie ekranu
+    // podsumowania (wynik, statystyki, nowe osiągnięcia).
+    this.onGameOver = null;
     this._lastCloseCallTime = 0;
     this._gridBounds = 45;
     this._currentDifficulty = 'medium';
@@ -335,6 +339,8 @@ export class Game {
       this.multiplayerManager.endGame(winnerRole);
     }
     
+    if (this.onGameOver) this.onGameOver({ won: false });
+    
     console.log('Player died!');
     this._scheduleAutoRestart();
   }
@@ -368,6 +374,8 @@ export class Game {
       this.multiplayerManager.endGame(winnerRole);
     }
     
+    if (this.onGameOver) this.onGameOver({ won: true });
+    
     console.log('Opponent died! You win!');
     this._scheduleAutoRestart();
   }
@@ -384,12 +392,12 @@ export class Game {
     if (this._autoRestartTimer) clearTimeout(this._autoRestartTimer);
     this._autoRestartTimer = setTimeout(() => {
       this._autoRestartTimer = null;
-      // Runda mogła się już zacząć ręcznie (gracz sam nacisnął R/RESTART)
-      // zanim minął czas - wtedy nic nie rób, żeby nie przerwać świeżo
-      // zaczętej rundy.
+      // Runda mogła się już zacząć ręcznie (gracz sam nacisnął R/RESTART,
+      // albo przycisk "Kontynuuj" na ekranie podsumowania) zanim minął
+      // czas - wtedy nic nie rób, żeby nie przerwać świeżo zaczętej rundy.
       if (!this.gameOver) return;
       this.restart(this._currentDifficulty);
-    }, 2500);
+    }, 9000); // było 2500 - wydłużone, żeby było na co popatrzeć na ekranie podsumowania
   }
 
   update(deltaTime) {
