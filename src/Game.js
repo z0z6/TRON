@@ -454,7 +454,7 @@ export class Game {
       
       // Wizualne oznaczenie aktywnych efektów na modelu gracza
       this.player.mesh.material.opacity = this.player.isGhost ? 0.4 : 1.0;
-      this.player.mesh.material.emissiveIntensity = this.player.hasShield ? 1.2 : 0.5;
+      this.player.mesh.material.emissiveIntensity = this.player.hasShield ? 3.2 : 2.0;
       
       // --- Punktacja ---
       this.scoringSystem.updateSurvivalTime(deltaTime);
