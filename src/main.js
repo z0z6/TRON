@@ -60,9 +60,9 @@ composer.addPass(renderPass);
 
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(initialSize.width, initialSize.height),
-  0.9,   // strength - siła poświaty
-  0.5,   // radius - promień rozmycia
-  0.15   // threshold - im niżej, tym więcej rzeczy zaczyna świecić
+  0.45,  // strength - siła poświaty (było 0.9 - przycięte prawie o połowę)
+  0.35,  // radius - promień rozmycia (było 0.5 - węższa, mniej "rozlana" poświata)
+  0.45   // threshold - im wyżej, tym MNIEJ rzeczy zaczyna świecić (było 0.15)
 );
 composer.addPass(bloomPass);
 
