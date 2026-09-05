@@ -17,13 +17,18 @@ export class SynthwaveEnvironment {
   }
 
   _buildFloorBase() {
-    // Nieprzezroczysta, ciemnogranatowa płaszczyzna TUŻ pod siatką gry -
-    // siatka (Grid.js) rysuje tylko linie z przezroczystymi przerwami między
-    // nimi, więc bez tej bazy przez te przerwy byłoby widać domyślne tło
-    // sceny zamiast spójnej, ciemnej podłogi.
+    // Lustrzana, przyciemniona podłoga TUŻ pod siatką gry - odbija neonowe
+    // ślady i siatkę (Grid.js), dając klasyczny "glossy floor" ze
+    // stylistyki synthwave/Tron. Parametr color Reflectora przyciemnia i
+    // barwi odbicie mnożnikowo, więc podłoga nie staje się jaskrawym
+    // lustrem, tylko ciemną, subtelnie odbijającą taflą.
     const geometry = new THREE.PlaneGeometry(400, 400);
-    const material = new THREE.MeshBasicMaterial({ color: 0x0a0a2e });
-    this.floorBase = new THREE.Mesh(geometry, material);
+    this.floorBase = new Reflector(geometry, {
+      color: 0x0a0a2e,
+      textureWidth: 1024,
+      textureHeight: 1024,
+      clipBias: 0.003
+    });
     this.floorBase.rotation.x = -Math.PI / 2;
     this.floorBase.position.y = -0.55;
     this.group.add(this.floorBase);
