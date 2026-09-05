@@ -1015,6 +1015,177 @@
         // bez wywoływania natywnego zdarzenia 'resize' - trzeba przeliczyć ręcznie.
         window.addEventListener('game-viewport-resize', resizeCanvas);
 
+        // === DŹWIĘK SILNIKA (2D) ===
+        // Ten sam pomysł co w wersji 3D (src/AudioManager.js) - dwa
+        // niezależne głosy (p1/p2), każdy z własnym łańcuchem Web Audio.
+        // Głos "p2" (AI) ma dodatkowy węzeł distanceGain sterowany co klatkę
+        // wg odległości siatkowej od gracza - im dalej, tym ciszej. Zmiana
+        // kierunku (trySetPlayerDirection dla p1, aiMove dla p2) wywołuje
+        // playGearShift() - krótkie narastanie tonu silnika w górę i płynny
+        // powrót, jak zmiana biegu w silniku spalinowym.
+        const AUDIO = {
+            ctx: null,
+            masterGain: null,
+            initialized: false,
+            voices: { p1: null, p2: null },
+
+            init() {
+                if (this.initialized) return;
+                try {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (this.ctx.state === 'suspended') this.ctx.resume();
+                    this.masterGain = this.ctx.createGain();
+                    this.masterGain.gain.value = 0.3;
+                    this.masterGain.connect(this.ctx.destination);
+                    this.initialized = true;
+                    this.startEngine('p1');
+                    this.startEngine('p2');
+                } catch (e) {
+                    console.warn('Web Audio API not supported:', e);
+                }
+            },
+
+            startEngine(id) {
+                if (!this.initialized) return;
+                this.stopEngine(id);
+                const ctx = this.ctx;
+                const voice = {};
+
+                voice.filter = ctx.createBiquadFilter();
+                voice.filter.type = 'lowpass';
+                voice.filter.frequency.value = 400;
+                voice.filter.Q.value = 1.2;
+
+                voice.osc1 = ctx.createOscillator();
+                voice.osc1.type = 'sawtooth';
+                voice.osc1.frequency.value = 80;
+
+                voice.osc2 = ctx.createOscillator();
+                voice.osc2.type = 'sawtooth';
+                voice.osc2.frequency.value = 80;
+                voice.osc2.detune.value = 11;
+
+                voice.sub = ctx.createOscillator();
+                voice.sub.type = 'sine';
+                voice.sub.frequency.value = 40;
+
+                voice.gain = ctx.createGain();
+                voice.gain.gain.value = 0.09;
+                voice.subGain = ctx.createGain();
+                voice.subGain.gain.value = 0.05;
+
+                voice.lfo = ctx.createOscillator();
+                voice.lfo.type = 'sine';
+                voice.lfo.frequency.value = 0.15;
+                voice.lfoGain = ctx.createGain();
+                voice.lfoGain.gain.value = 120;
+                voice.lfo.connect(voice.lfoGain);
+                voice.lfoGain.connect(voice.filter.frequency);
+
+                // Mnożnik głośności wg odległości (patrz setDistanceGain) -
+                // dla p1 zawsze zostaje 1, ustawiany tylko dla p2.
+                voice.distanceGain = ctx.createGain();
+                voice.distanceGain.gain.value = 1;
+
+                voice.osc1.connect(voice.filter);
+                voice.osc2.connect(voice.filter);
+                voice.filter.connect(voice.gain);
+                voice.gain.connect(voice.distanceGain);
+                voice.distanceGain.connect(this.masterGain);
+                voice.sub.connect(voice.subGain);
+                voice.subGain.connect(voice.distanceGain);
+
+                voice.osc1.start();
+                voice.osc2.start();
+                voice.sub.start();
+                voice.lfo.start();
+
+                voice.currentBaseFreq = 80;
+                this.voices[id] = voice;
+            },
+
+            stopEngine(id) {
+                const ids = id ? [id] : Object.keys(this.voices);
+                for (const vid of ids) {
+                    const voice = this.voices[vid];
+                    if (!voice) continue;
+                    [voice.osc1, voice.osc2, voice.sub, voice.lfo].forEach((o) => {
+                        if (o) { try { o.stop(); } catch (e) { /* już zatrzymany */ } }
+                    });
+                    this.voices[vid] = null;
+                }
+            },
+
+            // speedFactor: 0 (bazowa prędkość) do 1 (aktywny power-up
+            // prędkości) - 2D nie ma ciągłej prędkości jak 3D, tylko
+            // dyskretny stan "boost aktywny czy nie".
+            updateEngine(id, speedFactor) {
+                const voice = this.voices[id];
+                if (!voice) return;
+                const frequency = 80 + speedFactor * 120;
+                voice.currentBaseFreq = frequency;
+                const now = this.ctx.currentTime;
+                voice.osc1.frequency.setTargetAtTime(frequency, now, 0.1);
+                voice.osc2.frequency.setTargetAtTime(frequency, now, 0.1);
+                voice.sub.frequency.setTargetAtTime(frequency / 2, now, 0.1);
+                voice.filter.frequency.setTargetAtTime(350 + speedFactor * 900, now, 0.15);
+            },
+
+            setDistanceGain(id, gain) {
+                const voice = this.voices[id];
+                if (!voice) return;
+                voice.distanceGain.gain.setTargetAtTime(gain, this.ctx.currentTime, 0.12);
+            },
+
+            // "Podbicie biegu" przy zmianie kierunku - patrz identyczny
+            // mechanizm i komentarz w src/AudioManager.js#playGearShift.
+            playGearShift(id) {
+                const voice = this.voices[id];
+                if (!voice) return;
+                const now = this.ctx.currentTime;
+                const base = voice.currentBaseFreq || 80;
+                const peak = base * 2.4;
+                [voice.osc1, voice.osc2].forEach((osc) => {
+                    osc.frequency.cancelScheduledValues(now);
+                    osc.frequency.setValueAtTime(base, now);
+                    osc.frequency.linearRampToValueAtTime(peak, now + 0.09);
+                    osc.frequency.setTargetAtTime(base, now + 0.09, 0.15);
+                });
+                voice.sub.frequency.cancelScheduledValues(now);
+                voice.sub.frequency.setValueAtTime(base / 2, now);
+                voice.sub.frequency.linearRampToValueAtTime(peak / 2, now + 0.09);
+                voice.sub.frequency.setTargetAtTime(base / 2, now + 0.09, 0.15);
+            },
+
+            playDerezz() {
+                if (!this.initialized) return;
+                const ctx = this.ctx;
+                const bufferSize = ctx.sampleRate * 0.5;
+                const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+                const noise = ctx.createBufferSource();
+                noise.buffer = buffer;
+                const noiseGain = ctx.createGain();
+                noiseGain.gain.setValueAtTime(0.5, ctx.currentTime);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(2000, ctx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.5);
+                noise.connect(filter);
+                filter.connect(noiseGain);
+                noiseGain.connect(this.masterGain);
+                noise.start();
+                noise.stop(ctx.currentTime + 0.5);
+            },
+
+            setMuted(muted) {
+                if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 0.3;
+            }
+        };
+
         let p1, p2, isRunning, isPaused, scores, gameLoop;
         // --- Efekty wizualne (niezależne od stałego kroku logiki 80ms -
         // patrz renderLoop() na dole pliku, który je aktualizuje i rysuje
@@ -1046,6 +1217,13 @@
             if (gameLoop) clearInterval(gameLoop);
             gameLoop = setInterval(update, 80); // Szybsza gra
             flashStartTime = performance.now(); // krótki błysk "boot-up" na starcie rundy
+
+            // Ten sam gest użytkownika (klik/Spacja startujący rundę)
+            // odblokowuje AudioContext, co przeglądarki wymagają. init()
+            // jest idempotentne - realnie wykona się tylko raz.
+            AUDIO.init();
+            AUDIO.startEngine('p1');
+            AUDIO.startEngine('p2');
         }
 
         function update() {
@@ -1068,6 +1246,20 @@
 
             updatePowerUps();
             updatePowerUpHud();
+
+            // Wysokość dźwięku silnika - 1, gdy aktywny power-up prędkości
+            // (patrz movePlayerStep/POWERUP_TYPES.speed), inaczej 0 (baza).
+            const now = performance.now();
+            AUDIO.updateEngine('p1', (p1.speedUntil && now < p1.speedUntil) ? 1 : 0);
+            AUDIO.updateEngine('p2', (p2.speedUntil && now < p2.speedUntil) ? 1 : 0);
+
+            // Głośność silnika p2 wg odległości siatkowej od p1 - im dalej,
+            // tym ciszej (floor 0.08, nigdy całkiem cicho). maxAudibleDistance
+            // dobrany do rozmiaru siatki (GRID_SIZE=50).
+            const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+            const maxAudibleDistance = 45;
+            const proximity = Math.max(0, 1 - dist / maxAudibleDistance);
+            AUDIO.setDistanceGain('p2', 0.08 + proximity * 0.92);
 
             if (p1Dead || p2Dead) {
                 endRound();
@@ -1141,6 +1333,8 @@
             if (p1Crashed) spawnExplosion(p1.x * CELL_W + CELL_W / 2, p1.y * CELL_H + CELL_H / 2, p1.color);
             if (p2Crashed) spawnExplosion(p2.x * CELL_W + CELL_W / 2, p2.y * CELL_H + CELL_H / 2, p2.color);
             shakeUntil = performance.now() + 320;
+            AUDIO.playDerezz();
+            AUDIO.stopEngine();
             
             p1ScoreEl.textContent = scores.p1;
             p2ScoreEl.textContent = scores.p2;
@@ -1552,6 +1746,7 @@
             if (dy !== 0 && player.dy === dy) return;
             player.dx = dx;
             player.dy = dy;
+            AUDIO.playGearShift(player === p1 ? 'p1' : 'p2');
         }
 
         // === POPRAWIONE AI - unika kolizji ===
@@ -1584,6 +1779,7 @@
         }
 
         function aiMove() {
+            const prevDx = p2.dx, prevDy = p2.dy;
             const directions = [
                 { dx: 0, dy: -1 },
                 { dx: 0, dy: 1 },
@@ -1673,6 +1869,9 @@
 
             p2.dx = best.dir.dx;
             p2.dy = best.dir.dy;
+            if (p2.dx !== prevDx || p2.dy !== prevDy) {
+                AUDIO.playGearShift('p2');
+            }
         }
 
         // Przycisk Esc / klawisz Escape - wyjście do ekranu wyboru trybu
