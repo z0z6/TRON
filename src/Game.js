@@ -58,7 +58,7 @@ export class Game {
     const material = new THREE.MeshStandardMaterial({
       color: color,
       emissive: color,
-      emissiveIntensity: 2.0, // >1 celowo - przekracza próg bloomu (main.js), motocykl ma "świecić"
+      emissiveIntensity: 1.1, // >1 celowo - przekracza próg bloomu (main.js), motocykl ma "świecić"
       transparent: true
     });
     
@@ -454,7 +454,7 @@ export class Game {
       
       // Wizualne oznaczenie aktywnych efektów na modelu gracza
       this.player.mesh.material.opacity = this.player.isGhost ? 0.4 : 1.0;
-      this.player.mesh.material.emissiveIntensity = this.player.hasShield ? 3.2 : 2.0;
+      this.player.mesh.material.emissiveIntensity = this.player.hasShield ? 1.8 : 1.1;
       
       // --- Punktacja ---
       this.scoringSystem.updateSurvivalTime(deltaTime);
@@ -500,7 +500,7 @@ export class Game {
       this.player.hasShield = false;
       this.player.isGhost = false;
       this.player.mesh.material.opacity = 1.0;
-      this.player.mesh.material.emissiveIntensity = 2.0;
+      this.player.mesh.material.emissiveIntensity = 1.1;
       this.playerTrailMesh.start(this.player.position, this.player.direction);
     }
     
