@@ -105,10 +105,11 @@ export class RemotePlayer {
 
   dispose() {
     this.scene.remove(this.mesh);
-    // this.mesh to teraz THREE.Group (patrz LightCycleModel.js) - jak w
-    // AI.js, trzeba posprzątać geometrię/materiał każdej części z osobna.
+    // this.mesh to teraz klon modelu GLTF (LightCycleModel.js) - GEOMETRIE
+    // są współdzielone z szablonem i innymi motocyklami, więc NIE wolno
+    // ich tu disposować (patrz identyczny komentarz w AI.js). Materiały są
+    // już unikalnymi klonami per-instancja - te bezpiecznie sprzątamy.
     this.mesh.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
       if (obj.material) obj.material.dispose();
     });
     this.trail.dispose();
