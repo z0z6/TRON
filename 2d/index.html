@@ -716,6 +716,18 @@
         function update() {
             if (isPaused) return;
 
+            // AI decyduje o kierunku TUŻ przed ruchem - w tym samym kroku co
+            // przesunięcie pozycji (patrz usunięty niżej niezsynchronizowany
+            // interwał AI). Wcześniej aiMove() był wywoływany na osobnym
+            // timerze co 150ms, podczas gdy fizyka rusza co 80ms - te dwa
+            // okresy nie są swoimi wielokrotnościami, więc average co ~1,9
+            // ruchu AI podejmowało JEDNĄ decyzję na DWA pola do przodu, a
+            // sprawdzenie bezpieczeństwa w aiMove() obejmuje tylko jedno pole.
+            // Efekt: AI regularnie "na ślepo" wjeżdżało drugim polem w
+            // ścianę lub własny ślad. Wywołanie tu, raz na każdy fizyczny
+            // ruch, usuwa tę lukę całkowicie.
+            aiMove();
+
             p1.x += p1.dx;
             p1.y += p1.dy;
             p2.x += p2.dx;
@@ -930,10 +942,6 @@
             p2.dx = best.dir.dx;
             p2.dy = best.dir.dy;
         }
-
-        setInterval(() => {
-            if (isRunning && !isPaused) aiMove();
-        }, 150);
 
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
