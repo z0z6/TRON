@@ -468,8 +468,15 @@ function updateMatrixBackground(group, elapsed, deltaTime) {
 // --- AMBER: krajobraz vaporwave --------------------------------------------
 // Ciepłe, gradientowe słońce (bez prążków - to odróżnia je od synthwave) +
 // unoszące się, obracające się druciane "święte geometrie" (piramidy,
-// torusy) + pierścień niskich, drucianych kolumn/pylonów (klasyczny motyw
-// vaporwave - "greckie kolumny"), zakopanych pod posadzką (cylinder).
+// torusy) + pierścień pylonów/kolumn + bryły gruntowe (jak w glacier, tylko
+// w ciepłej palecie). WAŻNE: kolumny i bryły gruntowe używają
+// MeshStandardMaterial (reaguje na directionalLight z main.js, zawieszone
+// wysoko nad sceną), a nie płaskiego MeshBasicMaterial - inaczej twarde
+// obcięcie geometrii na poziomie podłogi (tam, gdzie znika pod nieprzezro-
+// czystym Reflectorem) wygląda jak zanurzenie w tafli jeziora zamiast
+// naturalnego, oświetlonego z góry obiektu zawieszonego w przestrzeni. Ten
+// "zanurzony" wygląd jest CELOWY i zostaje TYLKO w motywie glacier
+// (pasuje do lodowego jeziora) - tu ma zniknąć.
 function buildAmberBackground() {
   const rand = makeRand(9001);
   const group = new THREE.Group();
@@ -498,8 +505,58 @@ function buildAmberBackground() {
   }
   group.userData.amberShapes = shapes;
 
+  // --- Bryły gruntowe - ten sam pomysł co lodowe bryły w glacier (kanciaste
+  // kształty, zakopane pod posadzką, świecący kontur), ale w ciepłej
+  // palecie i z LIT materiałem (patrz komentarz na górze funkcji), więc
+  // światło z main.js daje płynne przejście jasny-góra/ciemny-dół zamiast
+  // twardego ucięcia. Dwie warstwy głębi - bliższa większa i mocniej
+  // skrząca się, dalsza mniejsza i słabsza (ten sam wzorzec co glacier). ---
+  const groundSparkles = [];
+  function addGroundLayer(count, radiusMin, radiusMax, scaleMul, sparkleStrength) {
+    for (let i = 0; i < count; i++) {
+      const isOcta = rand() < 0.5;
+      const visibleHeight = (isOcta ? (10 + rand() * 20) : (12 + rand() * 26)) * scaleMul;
+      const geometry = isOcta
+        ? new THREE.OctahedronGeometry((6 + rand() * 12) * scaleMul, 0)
+        : new THREE.ConeGeometry((5 + rand() * 9) * scaleMul, visibleHeight, 5);
+      const color = rand() < 0.5 ? 0xffb347 : 0xff8f6e;
+      const material = new THREE.MeshStandardMaterial({
+        color, emissive: color, emissiveIntensity: 0.12, roughness: 0.55, metalness: 0.1, fog: true
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+
+      const angle = rand() * Math.PI * 2;
+      const radius = radiusMin + rand() * (radiusMax - radiusMin);
+      const buriedExtra = (15 + rand() * 35) * scaleMul;
+      const totalHeight = visibleHeight + buriedExtra;
+      const yScale = totalHeight / visibleHeight;
+      mesh.position.set(
+        Math.cos(angle) * radius,
+        (visibleHeight - buriedExtra) / 2 - 0.55,
+        Math.sin(angle) * radius
+      );
+      mesh.rotation.set(rand() * 0.3, rand() * Math.PI, rand() * 0.3);
+      mesh.scale.set(0.7 + rand() * 0.6, yScale, 0.7 + rand() * 0.6);
+      disposeAwareAdd(group, mesh);
+
+      const edges = new THREE.EdgesGeometry(geometry);
+      const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xffe0b3, transparent: true, opacity: 0.7, fog: false });
+      const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+      edgeLines.position.copy(mesh.position);
+      edgeLines.rotation.copy(mesh.rotation);
+      edgeLines.scale.copy(mesh.scale);
+      disposeAwareAdd(group, edgeLines);
+
+      groundSparkles.push({ material: edgeMaterial, phase: rand() * Math.PI * 2, strength: sparkleStrength, base: 0.7 });
+    }
+  }
+  addGroundLayer(30, 70, 160, 1.1, 0.85);   // bliżej sceny - większe, mocniej skrzące
+  addGroundLayer(42, 160, 300, 0.65, 0.3);  // dalej - mniejsze, słabiej skrzące
+  group.userData.amberGroundSparkles = groundSparkles;
+
   // Pylony/kolumny - w przeciwieństwie do unoszących się kształtów, te
-  // faktycznie "stoją" i są zakopane pod posadzką.
+  // faktycznie "stoją" i są zakopane pod posadzką. LIT materiał (patrz
+  // komentarz na górze funkcji) zamiast płaskiego wireframe.
   const columnCount = 22;
   for (let i = 0; i < columnCount; i++) {
     const angle = (i / columnCount) * Math.PI * 2 + rand() * 0.1;
@@ -507,8 +564,15 @@ function buildAmberBackground() {
     const visibleHeight = 22 + rand() * 22;
     const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 20, 50);
     const geometry = new THREE.CylinderGeometry(2, 2.6, totalHeight, 12);
-    const material = new THREE.MeshBasicMaterial({
-      color: rand() < 0.5 ? 0xff9ecf : 0xffcf8a, wireframe: true, transparent: true, opacity: 0.45, fog: true
+    const material = new THREE.MeshStandardMaterial({
+      color: rand() < 0.5 ? 0xff9ecf : 0xffcf8a,
+      emissive: rand() < 0.5 ? 0xff9ecf : 0xffcf8a,
+      emissiveIntensity: 0.1,
+      roughness: 0.5,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.55,
+      fog: true
     });
     const col = new THREE.Mesh(geometry, material);
     col.position.set(Math.cos(angle) * radius, centerY, Math.sin(angle) * radius);
@@ -520,10 +584,19 @@ function buildAmberBackground() {
 
 function updateAmberBackground(group, elapsed, deltaTime) {
   const shapes = group.userData.amberShapes;
-  if (!shapes) return;
-  for (const mesh of shapes) {
-    mesh.rotation.y += mesh.userData.spin * deltaTime;
-    mesh.rotation.x += mesh.userData.spin * 0.4 * deltaTime;
+  if (shapes) {
+    for (const mesh of shapes) {
+      mesh.rotation.y += mesh.userData.spin * deltaTime;
+      mesh.rotation.x += mesh.userData.spin * 0.4 * deltaTime;
+    }
+  }
+
+  const sparkles = group.userData.amberGroundSparkles;
+  if (sparkles) {
+    for (const s of sparkles) {
+      const twinkle = 0.5 + 0.5 * Math.sin(elapsed * 3 + s.phase);
+      s.material.opacity = s.base * (1 - s.strength) + s.base * s.strength * twinkle;
+    }
   }
 }
 
@@ -531,45 +604,63 @@ function updateAmberBackground(group, elapsed, deltaTime) {
 // Kanciaste bryły lodu (ośmiościany/stożki) w chłodnej granatowo-białej
 // palecie, z jaśniejszym, świecącym konturem (EdgesGeometry) na każdej -
 // to jest właśnie "cyberpunkowy" akcent na naturalnym motywie lodowca.
-// Zanurzone głębiej pod posadzkę (cylinder) niż wcześniej, plus powoli
-// opadający śnieg (THREE.Points, animowany w update()).
+// UWAGA: ten motyw CELOWO zostaje przy płaskim MeshBasicMaterial i twardym
+// obcięciu na poziomie podłogi - w połączeniu z Reflectorem daje to
+// wrażenie, że bryły są zanurzone w tafli zamarzniętego jeziora, którego
+// częścią jest sama arena. To pasuje do koncepcji lodowca i jest jedynym
+// motywem, który świadomie NIE dostaje lit materiału jak amber/inne.
+//
+// Dwie warstwy głębi: bliższa (większe bryły, MOCNIEJ skrzący się kontur)
+// i dalsza (mniejsze, SŁABIEJ skrzące) - patrz updateGlacierBackground().
+// Plus powoli opadający śnieg (THREE.Points, animowany w update()).
 function buildGlacierBackground() {
   const rand = makeRand(5555);
   const group = new THREE.Group();
+  const sparkles = [];
 
-  const count = 85;
-  for (let i = 0; i < count; i++) {
-    const isOcta = rand() < 0.5;
-    const visibleHeight = isOcta ? (12 + rand() * 24) : (14 + rand() * 30);
-    const geometry = isOcta
-      ? new THREE.OctahedronGeometry(6 + rand() * 14, 0)
-      : new THREE.ConeGeometry(5 + rand() * 10, visibleHeight, 5);
-    const color = rand() < 0.7 ? 0x1a3550 : 0x0d1f30;
-    const material = new THREE.MeshBasicMaterial({ color, fog: true });
-    const mesh = new THREE.Mesh(geometry, material);
+  function addIceLayer(count, radiusMin, radiusMax, scaleMul, sparkleStrength) {
+    for (let i = 0; i < count; i++) {
+      const isOcta = rand() < 0.5;
+      const visibleHeight = (isOcta ? (12 + rand() * 24) : (14 + rand() * 30)) * scaleMul;
+      const geometry = isOcta
+        ? new THREE.OctahedronGeometry((6 + rand() * 14) * scaleMul, 0)
+        : new THREE.ConeGeometry((5 + rand() * 10) * scaleMul, visibleHeight, 5);
+      const color = rand() < 0.7 ? 0x1a3550 : 0x0d1f30;
+      const material = new THREE.MeshBasicMaterial({ color, fog: true });
+      const mesh = new THREE.Mesh(geometry, material);
 
-    const angle = rand() * Math.PI * 2;
-    const radius = 90 + rand() * 220;
-    const px = Math.cos(angle) * radius, pz = Math.sin(angle) * radius;
-    // Efekt cylindra: rozciągamy bryłę w dół (skala Y > 1, środek geometrii
-    // przesunięty niżej), więc więcej jej masy ciągnie się pod posadzkę
-    // zamiast kończyć się dokładnie na jej poziomie.
-    const buriedExtra = 15 + rand() * 40;
-    const totalHeight = visibleHeight + buriedExtra;
-    const yScale = totalHeight / visibleHeight;
-    mesh.position.set(px, (visibleHeight - buriedExtra) / 2 - 0.55, pz);
-    mesh.rotation.set(rand() * 0.3, rand() * Math.PI, rand() * 0.3);
-    mesh.scale.set(0.7 + rand() * 0.6, yScale, 0.7 + rand() * 0.6);
-    disposeAwareAdd(group, mesh);
+      const angle = rand() * Math.PI * 2;
+      const radius = radiusMin + rand() * (radiusMax - radiusMin);
+      const px = Math.cos(angle) * radius, pz = Math.sin(angle) * radius;
+      // Efekt cylindra: rozciągamy bryłę w dół (skala Y > 1, środek geometrii
+      // przesunięty niżej), więc więcej jej masy ciągnie się pod posadzkę
+      // zamiast kończyć się dokładnie na jej poziomie.
+      const buriedExtra = (15 + rand() * 40) * scaleMul;
+      const totalHeight = visibleHeight + buriedExtra;
+      const yScale = totalHeight / visibleHeight;
+      mesh.position.set(px, (visibleHeight - buriedExtra) / 2 - 0.55, pz);
+      mesh.rotation.set(rand() * 0.3, rand() * Math.PI, rand() * 0.3);
+      mesh.scale.set(0.7 + rand() * 0.6, yScale, 0.7 + rand() * 0.6);
+      disposeAwareAdd(group, mesh);
 
-    const edges = new THREE.EdgesGeometry(geometry);
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x8fefff, transparent: true, opacity: 0.7, fog: false });
-    const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
-    edgeLines.position.copy(mesh.position);
-    edgeLines.rotation.copy(mesh.rotation);
-    edgeLines.scale.copy(mesh.scale);
-    disposeAwareAdd(group, edgeLines);
+      const edges = new THREE.EdgesGeometry(geometry);
+      const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x8fefff, transparent: true, opacity: 0.7, fog: false });
+      const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+      edgeLines.position.copy(mesh.position);
+      edgeLines.rotation.copy(mesh.rotation);
+      edgeLines.scale.copy(mesh.scale);
+      disposeAwareAdd(group, edgeLines);
+
+      sparkles.push({ material: edgeMaterial, phase: rand() * Math.PI * 2, strength: sparkleStrength, base: 0.7 });
+    }
   }
+
+  // Bliżej sceny - większe bryły, wyraźnie mocniej skrzący się kontur.
+  addIceLayer(55, 70, 170, 1.15, 1.0);
+  // Dalej w tło - mniejsze, skrzą się wyraźnie słabiej.
+  addIceLayer(75, 170, 340, 0.7, 0.3);
+
+  group.userData.iceSparkles = sparkles;
 
   const snowCount = 340;
   const snowGeometry = new THREE.BufferGeometry();
@@ -599,13 +690,22 @@ function buildGlacierBackground() {
 function updateGlacierBackground(group, elapsed, deltaTime) {
   const snow = group.userData.snow;
   const velocities = group.userData.snowVelocities;
-  if (!snow) return;
-  const positions = snow.geometry.attributes.position.array;
-  for (let i = 0; i < velocities.length; i++) {
-    positions[i * 3 + 1] -= velocities[i] * deltaTime;
-    if (positions[i * 3 + 1] < -1) positions[i * 3 + 1] = 160;
+  if (snow) {
+    const positions = snow.geometry.attributes.position.array;
+    for (let i = 0; i < velocities.length; i++) {
+      positions[i * 3 + 1] -= velocities[i] * deltaTime;
+      if (positions[i * 3 + 1] < -1) positions[i * 3 + 1] = 160;
+    }
+    snow.geometry.attributes.position.needsUpdate = true;
   }
-  snow.geometry.attributes.position.needsUpdate = true;
+
+  const sparkles = group.userData.iceSparkles;
+  if (sparkles) {
+    for (const s of sparkles) {
+      const twinkle = 0.5 + 0.5 * Math.sin(elapsed * 3 + s.phase);
+      s.material.opacity = s.base * (1 - s.strength) + s.base * s.strength * twinkle;
+    }
+  }
 }
 
 // === PUBLICZNY REJESTR ===
