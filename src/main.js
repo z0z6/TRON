@@ -281,6 +281,18 @@ scene.add(grid.mesh);
 
   let gameOverResult = null; // dane z ostatniego game.onGameOver, do wyświetlenia w overlayu
   let wasGameOver = false;
+  // Pauza - funkcja NOWA w 3D (2D już ją miało). Zamrożenie polega na
+  // pominięciu game.update() w animate() poniżej - dekoracyjne animacje tła
+  // (siatka/środowisko) świadomie lecą dalej, żeby ekran nie wyglądał na
+  // "martwy" podczas pauzy.
+  let isPaused = false;
+  const pauseOverlayEl = document.getElementById('pauseOverlay');
+
+  function togglePause() {
+    if (!game.isStarted || game.gameOver) return; // nie ma czego pauzować na ekranie startowym/po końcu rundy
+    isPaused = !isPaused;
+    pauseOverlayEl.classList.toggle('show', isPaused);
+  }
 
   game.onGameOver = (result) => {
     gameOverResult = result;
@@ -409,7 +421,7 @@ scene.add(grid.mesh);
     grid.update(timeInSeconds);
     environment.update(timeInSeconds, deltaTime);
   
-    game.update(deltaTime);
+    if (!isPaused) game.update(deltaTime);
     updateScoreHud();
 
     if (game.gameOver && !wasGameOver) {
@@ -444,6 +456,7 @@ scene.add(grid.mesh);
     const action = btn.dataset.turn === 'left' ? 'turnLeft' : 'turnRight';
     const press = (e) => {
       e.preventDefault();
+      if (isPaused) return;
       btn.classList.add('pressed');
       game.handlePlayerInput(action);
     };
@@ -479,6 +492,11 @@ scene.add(grid.mesh);
     game.toggleMute();
   }, { passive: false });
 
+  document.getElementById('fnPause3d').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    togglePause();
+  }, { passive: false });
+
   document.getElementById('fnLobby3d').addEventListener('touchstart', (e) => {
     e.preventDefault();
     ensureMultiplayerConnected().then((connected) => {
@@ -505,11 +523,17 @@ scene.add(grid.mesh);
       return;
     }
 
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      togglePause();
+      return;
+    }
+
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
-      game.handlePlayerInput('turnLeft');
+      if (!isPaused) game.handlePlayerInput('turnLeft');
     }
     if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
-      game.handlePlayerInput('turnRight');
+      if (!isPaused) game.handlePlayerInput('turnRight');
     }
   
     if (e.key === ' ' || e.key === 'Enter') {
