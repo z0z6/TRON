@@ -466,9 +466,52 @@
 
         .fn-icon { font-size: 0.98rem; }
         .fn-label { font-size: 0.49rem; font-weight: bold; letter-spacing: 0.4px; }
+
+        /* === BANER BŁĘDU - pokazuje treść nieobsłużonego wyjątku JS wprost
+           na ekranie, żeby dało się go odczytać/zrobić zrzut ekranu bez
+           otwierania konsoli deweloperskiej (ten sam komponent co w wersji
+           3D, src/index.html). === */
+        #errorBanner {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            background: rgba(120, 0, 0, 0.92);
+            color: #fff;
+            font-family: 'Courier Prime', 'Courier New', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            padding: 10px 14px;
+            max-height: 40vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            border-bottom: 2px solid #ff5555;
+        }
+
+        #errorBanner.show { display: block; }
     </style>
 </head>
 <body>
+    <div id="errorBanner"></div>
+    <script>
+        // === ŁAPACZ BŁĘDÓW - musi być pierwszym skryptem w <body> ===
+        (function () {
+            var banner = document.getElementById('errorBanner');
+            function show(msg) {
+                banner.textContent += (banner.textContent ? '\n\n' : '') + msg;
+                banner.classList.add('show');
+            }
+            window.addEventListener('error', function (e) {
+                show('BŁĄD JS: ' + e.message + '\n  w ' + (e.filename || '?') + ':' + e.lineno + ':' + e.colno);
+            });
+            window.addEventListener('unhandledrejection', function (e) {
+                show('NIEOBSŁUŻONY BŁĄD (Promise): ' + (e.reason && e.reason.stack ? e.reason.stack : e.reason));
+            });
+        })();
+    </script>
     <script>
         // === MOTYW KOLORYSTYCZNY ===
         // Musi wystartować jak najwcześniej (przed resztą gry) - inne skrypty
