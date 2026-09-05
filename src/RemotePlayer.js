@@ -30,7 +30,7 @@ export class RemotePlayer {
     const material = new THREE.MeshStandardMaterial({
       color: color,
       emissive: color,
-      emissiveIntensity: 2.0
+      emissiveIntensity: 1.1
     });
     this.mesh = new THREE.Mesh(geometry, material);
 
