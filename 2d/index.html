@@ -815,13 +815,13 @@
             const cx = player.x * CELL_W + CELL_W / 2;
             const cy = player.y * CELL_H + CELL_H / 2;
             const time = performance.now() / 1000;
-            const maxRadius = Math.max(CELL_W, CELL_H) * 3.5;
-            const ringCount = 3;
+            const maxRadius = Math.max(CELL_W, CELL_H) * 3.0; // było 3.5 - ciaśniejszy zasięg
+            const ringCount = 2; // było 3 - mniej "gęsto"
 
             for (let i = 0; i < ringCount; i++) {
                 const phase = (time * 0.6 + i / ringCount) % 1;
                 const radius = phase * maxRadius;
-                const alpha = (1 - phase) * 0.45;
+                const alpha = (1 - phase) * 0.3; // było 0.45 - subtelniejsze pierścienie
 
                 ctx.beginPath();
                 ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -835,7 +835,7 @@
 
         function drawPlayer(player) {
             ctx.fillStyle = player.color;
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = 5; // było 8 - spójne z przyciszonym bloomem w 3D
             ctx.shadowColor = player.color;
             player.trail.forEach(cell => {
                 ctx.fillRect(cell.x * CELL_W + 1, cell.y * CELL_H + 1, CELL_W - 2, CELL_H - 2);
