@@ -212,11 +212,13 @@ export class AI {
 
   dispose() {
     this.scene.remove(this.mesh);
-    // this.mesh to teraz THREE.Group (kilkanaście brył - patrz
-    // LightCycleModel.js), nie pojedynczy THREE.Mesh jak wcześniej -
-    // trzeba posprzątać geometrię/materiał KAŻDEJ części z osobna.
+    // this.mesh to teraz klon modelu GLTF (LightCycleModel.js) - GEOMETRIE
+    // są współdzielone z szablonem (i ze wszystkimi INNYMI motocyklami!),
+    // więc NIE wolno ich tu disposować - zniszczyłoby to renderowanie
+    // pozostałych, wciąż żywych motocykli. Materiały są już unikalnymi
+    // klonami per-instancja (patrz createLightCycleMesh) - te bezpiecznie
+    // sprzątamy.
     this.mesh.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
       if (obj.material) obj.material.dispose();
     });
     this.trail.dispose();
