@@ -536,37 +536,38 @@
            gry (#gameCanvasWrap) jest odpowiednio zwężone przez ten sam
            --side-margin, więc motocykl nigdy nie jeździ "pod" przyciskami -
            to czytelnie oddzielone od rozgrywki strefy, nie nakładka na canvas. */
+        /* Strefy sterowania - dedykowane, NIEWIELKIE marginesy po bokach pola
+           gry (patrz --side-margin, powiązane z rozmiarem przycisków). Pole
+           gry (#gameCanvasWrap) jest odpowiednio zwężone przez ten sam
+           --side-margin, więc motocykl nigdy nie jeździ "pod" przyciskami -
+           to czytelnie oddzielone od rozgrywki strefy, nie nakładka na canvas.
+           Jawne pozycjonowanie (absolute) zamiast flex+space-between - przy
+           space-between środek przycisku skrętu zależałby od tego, ile
+           innych przycisków stoi nad/pod nim (lewa strefa ma 1+1, prawa
+           1+2), więc NIE wypadałby dokładnie na środku wysokości strefy.
+           Absolute + top:50%/transform gwarantuje dokładny środek zawsze,
+           niezależnie od pozostałej zawartości. */
         .control-zone {
             position: fixed;
             top: 0;
             bottom: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: space-between;
             pointer-events: none;
         }
 
-        .control-zone-right {
-            right: 0;
-            width: var(--side-margin-right);
-            padding: 16px 0;
+        .control-zone-right { right: 0; width: var(--side-margin-right); }
+        .control-zone-left { left: 0; width: var(--side-margin-left); }
+
+        /* Przycisk skrętu - jeden na strefę (lewy w lewej, prawy w prawej -
+           patrz markup) - zawsze DOKŁADNIE na środku wysokości strefy, czyli
+           środek przycisku = środek marginesu. Każdy ma WŁASNY rozmiar
+           (patrz --turn-btn-w/--turn-btn-h w :root). */
+        .control-zone .dpad-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
-        .control-zone-left {
-            left: 0;
-            width: var(--side-margin-left);
-            /* Górny odstęp większy niż dolny - miejsce na przełącznik motywu
-               i przycisk Esc (oba: top:16px, 40px wysokości, patrz .theme-picker
-               i .esc-btn), żeby przycisk SIEĆ na górze marginesu nigdy na nie
-               nie nachodził. */
-            padding: 76px 0 16px;
-        }
-
-        /* Przyciski skrętu - jeden na strefę (lewy w lewej, prawy w prawej -
-           patrz markup), pozycjonowane pośrodku wysokości strefy przez
-           justify-content:space-between na .control-zone. Każdy ma WŁASNY
-           rozmiar (patrz --turn-btn-w/--turn-btn-h w :root). */
         .dpad-btn {
             display: flex;
             align-items: center;
@@ -589,6 +590,28 @@
             background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
             box-shadow: 0 0 20px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.8);
         }
+
+        /* Klawisze funkcyjne - przypięte do góry/dołu strefy, NIEZALEŻNIE od
+           przycisku skrętu (który zawsze zostaje na środku, patrz wyżej).
+           Pozycje per-przycisk (nie ogólna reguła), bo lewa i prawa strefa
+           mają różną liczbę i różny rozkład klawiszy. */
+        .control-zone .fn-btn {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Lewa strefa: SIEĆ u góry (z odstępem na przełącznik motywu/Esc -
+           oba top:16px, 40px wysokości), RESTART u dołu. */
+        #fnLobby3d { top: 76px; }
+        #fnRestart3d { bottom: 16px; }
+
+        /* Prawa strefa: KAMERA u góry, PAUZA na samym dole, WYCISZ tuż nad
+           nią (odstęp liczony od wysokości przycisku, żeby się nie stykały
+           przy różnych rozmiarach ekranu). */
+        #fnCamera3d { top: 16px; }
+        #fnPause3d { bottom: 16px; }
+        #fnMute3d { bottom: calc(16px + var(--fn-btn-h) + 10px); }
 
         .fn-btn {
             display: flex;
