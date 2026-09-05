@@ -221,10 +221,10 @@ export class Game {
     
     if (action === 'turnLeft') {
       this.turnPlayer('left');
-      this.audioManager.playTurnSound();
+      this.audioManager.playGearShift('player');
     } else if (action === 'turnRight') {
       this.turnPlayer('right');
-      this.audioManager.playTurnSound();
+      this.audioManager.playGearShift('player');
     }
     
     // W multiplayer, każdy skręt lokalnego gracza trzeba przekazać
@@ -351,6 +351,12 @@ export class Game {
     
     this.derezzEffect.create(this.opponent.position, 0xff00ff);
     this.opponent.hide();
+
+    // Symetria z handlePlayerDeath - wcześniej brakowało tu dźwięku i
+    // zatrzymania silników przy wygranej, więc runda kończyła się bezgłośnie
+    // tylko dla przeciwnika.
+    this.audioManager.playDerezzSound();
+    this.audioManager.stopEngineSound();
     
     const wonWithSpeed = this.powerUpSystem.getActiveEffects().some(e => e.type === 'speed');
     const perfectGame = this.scoringSystem.stats.closeCalls === 0;
@@ -427,21 +433,44 @@ export class Game {
       
       // Aktualizuj AI
       const lastOpponentPos = this.opponent.position.clone();
+      const lastOpponentDir = this.opponent.direction.clone();
       this.opponent.update(
         deltaTime,
         this.player.position,
         this.playerTrail,
         this.opponentTrail
       );
-      
+
+      // Zmiana kierunku przeciwnika (AI albo RemotePlayer w multiplayer -
+      // obie klasy mają dokładnie takie samo pole .direction) - ten sam
+      // "podbicie biegu" co przy skręcie gracza (handlePlayerInput), tylko
+      // na głosie "opponent". Porównanie exact-equals jest bezpieczne, bo
+      // kierunek to zawsze jeden z 4 dokładnych wektorów jednostkowych, nie
+      // ciągła wartość zmiennoprzecinkowa.
+      if (!this.opponent.direction.equals(lastOpponentDir)) {
+        this.audioManager.playGearShift('opponent');
+      }
+
       // Ten sam wzorzec (i ten sam bug przed naprawą) co dla gracza wyżej.
       const opponentKey = `${Math.floor(this.opponent.position.x)},${Math.floor(this.opponent.position.z)}`;
       const lastOpponentKey = `${Math.floor(lastOpponentPos.x)},${Math.floor(lastOpponentPos.z)}`;
       if (opponentKey !== lastOpponentKey) {
         this.opponentTrail.add(lastOpponentKey);
       }
-      
-      this.audioManager.updateEngineSound(this.player.speed);
+
+      this.audioManager.updateEngineSound('player', this.player.speed);
+      this.audioManager.updateEngineSound('opponent', this.opponent.speed);
+
+      // Głośność silnika przeciwnika wg odległości na scenie - im dalej od
+      // gracza, tym ciszej. maxAudibleDistance dobrany do rozmiaru areny
+      // (±45, patrz Grid(90,45) w main.js) - przy przeciwniku w drugim
+      // rogu planszy dźwięk jest już bardzo cichy, ale nigdy całkiem
+      // wyciszony (floor 0.08), żeby nie znikał nagle.
+      const opponentDistance = this.player.position.distanceTo(this.opponent.position);
+      const maxAudibleDistance = 80;
+      const proximity = Math.max(0, 1 - opponentDistance / maxAudibleDistance);
+      this.audioManager.setVoiceDistanceGain('opponent', 0.08 + proximity * 0.92);
+
       this.cameraController.follow(this.player.mesh, deltaTime);
       
       // --- Power-upy ---
@@ -524,7 +553,8 @@ export class Game {
     this.achievementSystem.incrementStat('gamesPlayed', 1);
     
     this.isStarted = true;
-    this.audioManager.startEngineSound();
+    this.audioManager.startEngineSound('player');
+    this.audioManager.startEngineSound('opponent');
     
     console.log('Game restarted and round started!');
   }
