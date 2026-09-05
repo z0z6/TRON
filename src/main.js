@@ -78,7 +78,7 @@ scene.add(directionalLight);
 
 const environment = new SynthwaveEnvironment(scene);
 environment.setFogColor(hexToNum(initialTheme.bg));
-environment.setAccentColors(hexToNum(initialTheme.p1), hexToNum(initialTheme.p2));
+environment.setTheme(window.__tronThemeKey || 'classic');
 
 const grid = new Grid(90, 45); // dopasowane do rzeczywistej granicy planszy (±45, patrz Game.js/AI.js)
 grid.setColor(hexToNum(initialTheme.p1));
@@ -98,7 +98,7 @@ window.addEventListener('tron-theme-change', (e) => {
   if (!theme) return;
   scene.background = new THREE.Color(hexToNum(theme.bg));
   environment.setFogColor(hexToNum(theme.bg));
-  environment.setAccentColors(hexToNum(theme.p1), hexToNum(theme.p2));
+  environment.setTheme(window.__tronThemeKey || 'classic');
   grid.setColor(hexToNum(theme.p1));
   grid.setGlowColors(hexToNum(theme.p1), hexToNum(theme.p2));
   game.applyThemeColors(hexToNum(theme.p1), hexToNum(theme.p2));
@@ -384,6 +384,7 @@ function animate(currentTime) {
     game.opponent ? game.opponent.position : null
   );
   grid.update(timeInSeconds);
+  environment.update(timeInSeconds, deltaTime);
   
   game.update(deltaTime);
   updateScoreHud();
