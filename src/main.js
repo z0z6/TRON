@@ -77,6 +77,15 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
+// Światło uzupełniające (fill/rim) z przeciwnej strony, chłodniejsze i
+// słabsze - samo ambient+directional spłaszczało budynki tła (patrz
+// BackgroundThemes.js) do jednej, dobrze oświetlonej strony i głębokiego
+// cienia po drugiej. Ten drugi kierunek dorzuca odrobinę światła w cień,
+// więc widać więcej kształtu (krawędzie, narożniki) zamiast czystej czerni.
+const fillLight = new THREE.DirectionalLight(0x88aaff, 0.25);
+fillLight.position.set(-15, 10, -10);
+scene.add(fillLight);
+
 const environment = new SynthwaveEnvironment(scene);
 environment.setFogColor(hexToNum(initialTheme.bg));
 environment.setTheme(window.__tronThemeKey || 'classic');
