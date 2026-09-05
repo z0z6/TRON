@@ -800,8 +800,37 @@
                 ctx.stroke();
             }
 
+            drawRipple(p1);
+            drawRipple(p2);
             drawPlayer(p1);
             drawPlayer(p2);
+        }
+
+        // Fala światła pod motocyklem - odpowiednik efektu z wersji 3D
+        // (grid.frag) przełożony na canvas 2D: kilka pierścieni sonaru
+        // rozchodzących się z bieżącej pozycji gracza, w jego kolorze z
+        // motywu. performance.now() zamiast licznika ticków, żeby faza fali
+        // była płynna niezależnie od tego, jak często draw() jest wołane.
+        function drawRipple(player) {
+            const cx = player.x * CELL_W + CELL_W / 2;
+            const cy = player.y * CELL_H + CELL_H / 2;
+            const time = performance.now() / 1000;
+            const maxRadius = Math.max(CELL_W, CELL_H) * 3.5;
+            const ringCount = 3;
+
+            for (let i = 0; i < ringCount; i++) {
+                const phase = (time * 0.6 + i / ringCount) % 1;
+                const radius = phase * maxRadius;
+                const alpha = (1 - phase) * 0.45;
+
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                ctx.strokeStyle = window.__tronHexToRgba
+                    ? window.__tronHexToRgba(player.color, alpha)
+                    : `rgba(255, 255, 255, ${alpha})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
         }
 
         function drawPlayer(player) {
