@@ -85,6 +85,131 @@
             }
         }
 
+        /* === EKRAN PODSUMOWANIA RUNDY (wynik, statystyki, rekordy) - ten
+           sam wzorzec co w wersji 3D (src/index.html), pokazywany zamiast
+           zwykłego #overlay po zakończeniu rundy. === */
+        #gameOverOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 25;
+            align-items: center;
+            justify-content: center;
+            background: rgba(3, 5, 12, 0.82);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #e0f7fc;
+            padding: 16px;
+        }
+
+        #gameOverOverlay.show { display: flex; }
+
+        #gameOverOverlay .panel {
+            width: min(420px, 100%);
+            max-height: 90vh;
+            overflow-y: auto;
+            background: linear-gradient(160deg, rgba(10, 14, 28, 0.97), rgba(6, 8, 18, 0.97));
+            border: 1px solid rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
+            border-radius: 14px;
+            padding: 22px 24px;
+            box-shadow: 0 0 40px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.25);
+            text-align: center;
+        }
+
+        /* Akcenty stylu per motyw - patrz analogiczne reguły w src/index.html */
+        body.theme-matrix #gameOverOverlay .panel {
+            font-family: 'Courier New', monospace;
+            background:
+                repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0px, rgba(0, 0, 0, 0.25) 1px, transparent 1px, transparent 3px),
+                linear-gradient(160deg, rgba(4, 16, 8, 0.97), rgba(2, 10, 4, 0.97));
+            border-radius: 4px;
+        }
+
+        body.theme-synthwave #gameOverOverlay .panel {
+            background: linear-gradient(160deg, rgba(28, 8, 30, 0.97), rgba(10, 4, 20, 0.97));
+        }
+
+        body.theme-amber #gameOverOverlay .panel {
+            background: linear-gradient(160deg, rgba(32, 16, 4, 0.97), rgba(16, 6, 2, 0.97));
+        }
+
+        body.theme-glacier #gameOverOverlay .panel {
+            background: linear-gradient(160deg, rgba(8, 22, 32, 0.97), rgba(4, 12, 20, 0.97));
+            border-width: 2px;
+        }
+
+        #gameOverOverlay h2 {
+            font-size: clamp(1.4rem, 5vw, 1.8rem);
+            letter-spacing: 3px;
+            margin-bottom: 4px;
+        }
+
+        #gameOverOverlay h2.won { color: var(--theme-p1); text-shadow: 0 0 20px var(--theme-p1); }
+        #gameOverOverlay h2.lost { color: var(--theme-p2); text-shadow: 0 0 20px var(--theme-p2); }
+
+        #gameOverOverlay .final-score {
+            font-size: clamp(2.2rem, 9vw, 3rem);
+            font-weight: bold;
+            margin: 6px 0 2px;
+        }
+
+        #gameOverOverlay .record-badge {
+            display: none;
+            font-size: 0.8rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: #ffd24a;
+            text-shadow: 0 0 10px rgba(255, 210, 74, 0.8);
+            margin-bottom: 10px;
+        }
+
+        #gameOverOverlay .record-badge.show { display: block; }
+
+        #gameOverOverlay .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 16px;
+            margin: 14px 0;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        #gameOverOverlay .stats-grid .label { color: #8fa; opacity: 0.65; }
+        #gameOverOverlay .stats-grid .value { font-weight: bold; text-align: right; }
+
+        #gameOverOverlay .lifetime {
+            margin-top: 14px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            font-size: 0.72rem;
+            color: rgba(224, 247, 252, 0.6);
+        }
+
+        #gameOverOverlay .actions {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        #gameOverOverlay button {
+            padding: 10px 22px;
+            border-radius: 30px;
+            border: 2px solid var(--theme-p1);
+            background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.15);
+            color: var(--theme-p1);
+            font-weight: bold;
+            letter-spacing: 1px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        #gameOverOverlay .countdown {
+            margin-top: 10px;
+            font-size: 0.68rem;
+            color: rgba(224, 247, 252, 0.45);
+        }
+
         /* === WINIETA + SKANLINIE (efekt "starego monitora CRT") ===
            Czysto kosmetyczny overlay nad canvasem - stały (bez migotania,
            celowo, żeby nie ryzykować dyskomfortu przy światłoczułości) -
@@ -296,6 +421,25 @@
 
         .score {
             text-shadow: 0 0 10px currentColor;
+        }
+
+        /* === HUD AKTYWNYCH POWER-UPÓW - mały rząd ikon z odliczaniem pod
+           wynikiem każdego gracza (patrz updatePowerUpHud() w skrypcie). === */
+        .effects-row {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            margin-top: 4px;
+            font-size: 0.65rem;
+            font-weight: normal;
+            min-height: 16px;
+        }
+
+        .effects-row .effect-chip {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid currentColor;
+            border-radius: 10px;
+            padding: 1px 6px;
         }
 
         .p1-score { color: var(--theme-p1); }
@@ -577,6 +721,16 @@
                 root.style.setProperty('--theme-p2-b', p2.b);
                 root.style.setProperty('--theme-bg', theme.bg);
 
+                // Klasa na <body> (theme-classic/theme-synthwave/...) - poza
+                // samymi kolorami (--theme-p1 itd., już podpięte wszędzie)
+                // pozwala dodać per-motyw akcenty stylu (czcionka, wzór tła
+                // panelu) tam, gdzie sam kolor nie wystarczy - patrz np.
+                // #gameOverOverlay.panel niżej.
+                document.body.className = document.body.className
+                    .replace(/\btheme-\w+\b/g, '')
+                    .trim();
+                document.body.classList.add(`theme-${key}`);
+
                 document.querySelectorAll('.theme-option').forEach((btn) => {
                     btn.classList.toggle('active', btn.dataset.theme === key);
                 });
@@ -726,8 +880,14 @@
 
     <div class="game-container">
         <div class="scoreboard">
-            <div class="score p1-score">P1: <span id="p1-score">0</span></div>
-            <div class="score p2-score">P2: <span id="p2-score">0</span></div>
+            <div>
+                <div class="score p1-score">P1: <span id="p1-score">0</span></div>
+                <div class="effects-row" id="p1-effects"></div>
+            </div>
+            <div>
+                <div class="score p2-score">P2: <span id="p2-score">0</span></div>
+                <div class="effects-row" id="p2-effects"></div>
+            </div>
         </div>
 
         <div class="canvas-wrapper">
@@ -737,6 +897,23 @@
                 <h2 id="overlay-title">SYSTEM READY</h2>
                 <p id="overlay-msg">Kliknij przycisk lub naciśnij <strong>SPACJĘ</strong></p>
                 <button id="start-btn" class="btn-start">URUCHOM CYKL</button>
+            </div>
+        </div>
+
+        <div id="gameOverOverlay">
+            <div class="panel">
+                <h2 id="gameOverTitle">KONIEC RUNDY</h2>
+                <div class="final-score" id="gameOverScore">0 : 0</div>
+                <div class="record-badge" id="gameOverRecordBadge">🏆 NOWA NAJDŁUŻSZA PASA!</div>
+
+                <div class="stats-grid" id="gameOverStatsGrid"></div>
+
+                <div class="lifetime" id="gameOverLifetime"></div>
+
+                <div class="actions">
+                    <button type="button" id="gameOverContinueBtn">NASTĘPNA RUNDA</button>
+                </div>
+                <div class="countdown" id="gameOverCountdown"></div>
             </div>
         </div>
 
@@ -768,6 +945,55 @@
         const startBtn = document.getElementById('start-btn');
         const p1ScoreEl = document.getElementById('p1-score');
         const p2ScoreEl = document.getElementById('p2-score');
+        const p1EffectsEl = document.getElementById('p1-effects');
+        const p2EffectsEl = document.getElementById('p2-effects');
+
+        const gameOverOverlayEl = document.getElementById('gameOverOverlay');
+        const gameOverTitleEl = document.getElementById('gameOverTitle');
+        const gameOverScoreEl = document.getElementById('gameOverScore');
+        const gameOverRecordBadgeEl = document.getElementById('gameOverRecordBadge');
+        const gameOverStatsGridEl = document.getElementById('gameOverStatsGrid');
+        const gameOverLifetimeEl = document.getElementById('gameOverLifetime');
+        const gameOverCountdownEl = document.getElementById('gameOverCountdown');
+        const gameOverContinueBtnEl = document.getElementById('gameOverContinueBtn');
+
+        // === POWER-UPY === (te same 4 typy i te same efekty co w trybie 3D
+        // - src/PowerUpSystem.js: tarcza=pełna nietykalność, duch=przenika
+        // przez ślady ale NIE przez ścianę, prędkość=szybszy ruch, bomba=
+        // natychmiast czyści fragment śladu przeciwnika. Tak jak w 3D, TYLKO
+        // gracz (p1) je zbiera - AI (p2) jest na nie kompletnie obojętne,
+        // nigdy ich nie szuka ani nie unika.)
+        const POWERUP_TYPES = {
+            shield: { color: '#39ff6e', duration: 5000, symbol: '🛡' },
+            speed:  { color: '#ffe93b', duration: 3000, symbol: '⚡' },
+            ghost:  { color: '#ff5df0', duration: 4000, symbol: '👻' },
+            bomb:   { color: '#ff4d4d', duration: 0,    symbol: '💣' }
+        };
+        const POWERUP_SPAWN_INTERVAL = 5000;
+        const POWERUP_MAX = 4;
+        const POWERUP_LIFETIME = 15000;
+        let powerUps = [];
+        let lastPowerUpSpawn = 0;
+        let powerUpsCollectedThisRound = 0;
+
+        // === REKORDY (localStorage) === - trwają między sesjami, w
+        // odróżnieniu od `scores` (wynik bieżącej sesji, resetowany tylko
+        // pełnym przeładowaniem strony - bez zmian względem wcześniej).
+        const RECORDS_KEY = 'tron2d-records';
+        function loadRecords() {
+            try {
+                return Object.assign({ longestRound: 0, bestStreak: 0, gamesPlayed: 0, p1Wins: 0 }, JSON.parse(localStorage.getItem(RECORDS_KEY)));
+            } catch (e) {
+                return { longestRound: 0, bestStreak: 0, gamesPlayed: 0, p1Wins: 0 };
+            }
+        }
+        function saveRecords() {
+            try { localStorage.setItem(RECORDS_KEY, JSON.stringify(records)); } catch (e) {}
+        }
+        let records = loadRecords();
+        let currentStreak = 0;
+        let roundStartTime = 0;
+        let gameOverAutoTimer = null;
 
         const GRID_SIZE = 50; // Zwiększona siatka = mniejsze ślady
         // Osobne wymiary komórki dla X/Y - siatka ROZCIĄGA SIĘ na cały
@@ -801,13 +1027,19 @@
 
         function initGame() {
             const theme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055' };
-            p1 = { x: 10, y: 25, dx: 1, dy: 0, trail: [], color: theme.p1 };
-            p2 = { x: 40, y: 25, dx: -1, dy: 0, trail: [], color: theme.p2 };
+            p1 = { x: 10, y: 25, dx: 1, dy: 0, trail: [], color: theme.p1, shieldUntil: 0, ghostUntil: 0, speedUntil: 0 };
+            p2 = { x: 40, y: 25, dx: -1, dy: 0, trail: [], color: theme.p2, shieldUntil: 0, ghostUntil: 0, speedUntil: 0 };
             isRunning = false;
             isPaused = false;
+            powerUps = [];
+            lastPowerUpSpawn = performance.now();
+            powerUpsCollectedThisRound = 0;
+            roundStartTime = performance.now();
+            updatePowerUpHud();
         }
 
         function startRound() {
+            hideGameOverOverlay();
             initGame();
             isRunning = true;
             overlay.classList.add('hidden');
@@ -831,37 +1063,68 @@
             // ruch, usuwa tę lukę całkowicie.
             aiMove();
 
-            p1.x += p1.dx;
-            p1.y += p1.dy;
-            p2.x += p2.dx;
-            p2.y += p2.dy;
+            const p1Dead = movePlayerStep(p1, p2);
+            const p2Dead = movePlayerStep(p2, p1);
 
-            p1.trail.push({ x: p1.x, y: p1.y });
-            p2.trail.push({ x: p2.x, y: p2.y });
+            updatePowerUps();
+            updatePowerUpHud();
 
-            if (checkCollision(p1, p2) || checkCollision(p2, p1)) {
+            if (p1Dead || p2Dead) {
                 endRound();
             }
         }
 
-        function checkCollision(player, opponent) {
-            if (player.x < 0 || player.x >= GRID_SIZE || player.y < 0 || player.y >= GRID_SIZE) {
-                return true;
-            }
-            for (let i = 0; i < player.trail.length - 1; i++) {
-                if (player.trail[i].x === player.x && player.trail[i].y === player.y) {
-                    return true;
-                }
-            }
-            // Kolizja z przeciwnikiem - jego cały ślad, WŁĄCZNIE z pozycją
-            // dopiero co dodaną w tym samym kroku (żeby wykryć też zderzenie
-            // czołowe, gdy obaj gracze wjadą na to samo pole jednocześnie).
-            for (let i = 0; i < opponent.trail.length; i++) {
-                if (opponent.trail[i].x === player.x && opponent.trail[i].y === player.y) {
-                    return true;
-                }
+        // Przesuwa gracza o 1 pole (albo 2, przy aktywnym power-upie
+        // prędkości) i sprawdza kolizję PO KAŻDYM pojedynczym polu, nie
+        // tylko na końcu - inaczej boost mógłby "przeskoczyć" przez ścianę w
+        // pośrednim kroku bez wykrycia (checkCollision patrzy tylko na
+        // BIEŻĄCĄ pozycję gracza, więc bez tego pośredni krok nigdy nie
+        // zostałby sprawdzony).
+        function movePlayerStep(player, opponent) {
+            const boosted = player.speedUntil && performance.now() < player.speedUntil;
+            const steps = boosted ? 2 : 1;
+            for (let s = 0; s < steps; s++) {
+                player.x += player.dx;
+                player.y += player.dy;
+                player.trail.push({ x: player.x, y: player.y });
+                if (checkCollision(player, opponent)) return true;
             }
             return false;
+        }
+
+        function checkCollision(player, opponent) {
+            const outOfBounds = player.x < 0 || player.x >= GRID_SIZE || player.y < 0 || player.y >= GRID_SIZE;
+
+            let hitTrail = false;
+            if (!outOfBounds) {
+                for (let i = 0; i < player.trail.length - 1; i++) {
+                    if (player.trail[i].x === player.x && player.trail[i].y === player.y) {
+                        hitTrail = true;
+                        break;
+                    }
+                }
+                // Kolizja z przeciwnikiem - jego cały ślad, WŁĄCZNIE z pozycją
+                // dopiero co dodaną w tym samym kroku (żeby wykryć też zderzenie
+                // czołowe, gdy obaj gracze wjadą na to samo pole jednocześnie).
+                if (!hitTrail) {
+                    for (let i = 0; i < opponent.trail.length; i++) {
+                        if (opponent.trail[i].x === player.x && opponent.trail[i].y === player.y) {
+                            hitTrail = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Tarcza daje pełną nietykalność (włącznie ze ścianą). Duch
+            // przenika przez ślady, ale NIE chroni przed wyjechaniem poza
+            // granicę planszy - dokładnie te same zasady co w 3D
+            // (src/Game.js#checkCollisions).
+            const now = performance.now();
+            if (player.shieldUntil && now < player.shieldUntil) return false;
+            if (player.ghostUntil && now < player.ghostUntil && hitTrail && !outOfBounds) return false;
+
+            return outOfBounds || hitTrail;
         }
 
         function endRound() {
@@ -881,14 +1144,77 @@
             
             p1ScoreEl.textContent = scores.p1;
             p2ScoreEl.textContent = scores.p2;
-            
-            const theme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055' };
-            overlayTitle.textContent = "KONIEC RUNDY";
-            overlayTitle.style.color = theme.p2;
-            overlayMsg.innerHTML = `Wynik: <span style="color:${theme.p1}">${scores.p1}</span> - <span style="color:${theme.p2}">${scores.p2}</span>`;
-            startBtn.textContent = "NASTĘPNA RUNDA";
-            overlay.classList.remove('hidden');
+
+            showGameOverOverlay(p1Crashed, p2Crashed);
         }
+
+        // === EKRAN PODSUMOWANIA RUNDY === (ten sam wzorzec co w 3D -
+        // src/main.js#showGameOverOverlay - wynik, statystyki, rekord,
+        // auto-restart po 9s). P1 to zawsze gracz (P2 to AI), więc "WYGRANA/
+        // PRZEGRANA" liczone jest z jego perspektywy.
+        function showGameOverOverlay(p1Crashed, p2Crashed) {
+            const draw = p1Crashed && p2Crashed;
+            const won = p2Crashed && !p1Crashed;
+            const roundDuration = (performance.now() - roundStartTime) / 1000;
+
+            gameOverTitleEl.textContent = draw ? 'REMIS' : (won ? 'WYGRANA' : 'PRZEGRANA');
+            gameOverTitleEl.className = draw ? '' : (won ? 'won' : 'lost');
+            gameOverScoreEl.textContent = `${scores.p1} : ${scores.p2}`;
+
+            records.gamesPlayed++;
+            if (won) {
+                currentStreak++;
+                records.p1Wins++;
+            } else if (!draw) {
+                currentStreak = 0;
+            }
+            let isRecord = false;
+            if (roundDuration > records.longestRound) { records.longestRound = roundDuration; isRecord = true; }
+            if (currentStreak > records.bestStreak) { records.bestStreak = currentStreak; isRecord = true; }
+            saveRecords();
+
+            gameOverRecordBadgeEl.classList.toggle('show', isRecord);
+
+            gameOverStatsGridEl.innerHTML = '';
+            const rows = [
+                ['Czas rundy', `${roundDuration.toFixed(1)}s`],
+                ['Power-upy', powerUpsCollectedThisRound],
+                ['Passa zwycięstw', currentStreak],
+                ['Rekord passy', records.bestStreak]
+            ];
+            for (const [label, value] of rows) {
+                const l = document.createElement('div');
+                l.className = 'label';
+                l.textContent = label;
+                const v = document.createElement('div');
+                v.className = 'value';
+                v.textContent = value;
+                gameOverStatsGridEl.appendChild(l);
+                gameOverStatsGridEl.appendChild(v);
+            }
+
+            gameOverLifetimeEl.textContent =
+                `Rekord rundy: ${records.longestRound.toFixed(1)}s · Rozegranych: ${records.gamesPlayed} · Wygranych P1: ${records.p1Wins}`;
+
+            gameOverCountdownEl.textContent = 'Kolejna runda zacznie się automatycznie za chwilę...';
+            gameOverOverlayEl.classList.add('show');
+
+            if (gameOverAutoTimer) clearTimeout(gameOverAutoTimer);
+            gameOverAutoTimer = setTimeout(() => {
+                gameOverAutoTimer = null;
+                startRound();
+            }, 9000);
+        }
+
+        function hideGameOverOverlay() {
+            gameOverOverlayEl.classList.remove('show');
+            if (gameOverAutoTimer) {
+                clearTimeout(gameOverAutoTimer);
+                gameOverAutoTimer = null;
+            }
+        }
+
+        gameOverContinueBtnEl.addEventListener('click', startRound);
 
         function draw() {
             const theme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055', bg: '#050811' };
@@ -923,6 +1249,7 @@
                 ctx.stroke();
             }
 
+            drawPowerUps();
             drawRipple(p1);
             drawRipple(p2);
             drawPlayer(p1);
@@ -970,7 +1297,11 @@
         }
 
         function drawPlayer(player) {
+            const now = performance.now();
             const len = player.trail.length;
+            const ghostActive = player.ghostUntil && now < player.ghostUntil;
+            const ghostAlpha = ghostActive ? 0.5 : 1; // duch - przenika przez ślady, więc rysujemy go półprzezroczyście
+
             // Ogon blaknie w stronę tyłu (kometa) zamiast być jednolitą
             // wstęgą - tylko ostatnie FADE_WINDOW komórek liczy alpha,
             // starsze (już całkiem "dojrzałe") rysują się w pełnej
@@ -980,9 +1311,10 @@
             ctx.shadowBlur = 5;
             player.trail.forEach((cell, i) => {
                 const distFromHead = len - 1 - i;
-                ctx.globalAlpha = distFromHead < FADE_WINDOW
+                const fadeAlpha = distFromHead < FADE_WINDOW
                     ? 0.35 + 0.65 * (1 - distFromHead / FADE_WINDOW)
                     : 1;
+                ctx.globalAlpha = fadeAlpha * ghostAlpha;
                 ctx.fillStyle = player.color;
                 ctx.fillRect(cell.x * CELL_W + 1, cell.y * CELL_H + 1, CELL_W - 2, CELL_H - 2);
             });
@@ -997,6 +1329,7 @@
                 const hy = head.y * CELL_H + CELL_H / 2;
                 const r = Math.max(CELL_W, CELL_H) * 0.65;
 
+                ctx.globalAlpha = ghostAlpha;
                 ctx.shadowBlur = 14;
                 ctx.fillStyle = player.color;
                 ctx.beginPath();
@@ -1008,8 +1341,140 @@
                 ctx.beginPath();
                 ctx.arc(hx, hy, r * 0.38, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.globalAlpha = 1;
+
+                // Tarcza - dodatkowy, pulsujący biały pierścień wokół głowy.
+                if (player.shieldUntil && now < player.shieldUntil) {
+                    const shieldPulse = 1 + Math.sin(now / 150) * 0.1;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(hx, hy, r * 1.5 * shieldPulse, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
             }
             ctx.shadowBlur = 0;
+        }
+
+        // === POWER-UPY: RYSOWANIE, SPAWN, ZBIERANIE, EFEKTY ===
+        function drawPowerUps() {
+            const now = performance.now();
+            for (const pu of powerUps) {
+                const config = POWERUP_TYPES[pu.type];
+                const cx = pu.x * CELL_W + CELL_W / 2;
+                const cy = pu.y * CELL_H + CELL_H / 2;
+                const pulse = 1 + Math.sin(now / 200) * 0.15;
+                const r = Math.max(CELL_W, CELL_H) * 0.55 * pulse;
+
+                ctx.save();
+                ctx.strokeStyle = config.color;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = config.color;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.font = `${Math.max(10, Math.floor(r * 1.1))}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(config.symbol, cx, cy);
+                ctx.restore();
+            }
+        }
+
+        function trailHasCell(trail, x, y) {
+            for (let i = 0; i < trail.length; i++) {
+                if (trail[i].x === x && trail[i].y === y) return true;
+            }
+            return false;
+        }
+
+        function spawnPowerUp() {
+            if (powerUps.length >= POWERUP_MAX) return;
+            const types = Object.keys(POWERUP_TYPES);
+            const type = types[Math.floor(Math.random() * types.length)];
+
+            let x, y, attempts = 0;
+            do {
+                x = 3 + Math.floor(Math.random() * (GRID_SIZE - 6));
+                y = 3 + Math.floor(Math.random() * (GRID_SIZE - 6));
+                attempts++;
+            } while (
+                attempts < 20 &&
+                (trailHasCell(p1.trail, x, y) || trailHasCell(p2.trail, x, y) || powerUps.some(p => p.x === x && p.y === y))
+            );
+
+            powerUps.push({ x, y, type, spawnTime: performance.now() });
+        }
+
+        function updatePowerUps() {
+            const now = performance.now();
+            if (now - lastPowerUpSpawn > POWERUP_SPAWN_INTERVAL) {
+                spawnPowerUp();
+                lastPowerUpSpawn = now;
+            }
+            powerUps = powerUps.filter(p => now - p.spawnTime < POWERUP_LIFETIME);
+
+            // Tak jak w 3D (PowerUpSystem.update tylko dla `player`) - TYLKO
+            // p1 zbiera power-upy, AI (p2) jest na nie obojętne.
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                const pu = powerUps[i];
+                if (pu.x === p1.x && pu.y === p1.y) {
+                    applyPowerUp(p1, p2, pu.type);
+                    powerUps.splice(i, 1);
+                }
+            }
+        }
+
+        function applyPowerUp(player, opponent, type) {
+            const now = performance.now();
+            const config = POWERUP_TYPES[type];
+            switch (type) {
+                case 'shield':
+                    player.shieldUntil = now + config.duration;
+                    break;
+                case 'speed':
+                    player.speedUntil = now + config.duration;
+                    break;
+                case 'ghost':
+                    player.ghostUntil = now + config.duration;
+                    break;
+                case 'bomb': {
+                    // Natychmiastowy efekt - czyści fragment śladu przeciwnika
+                    // wokół JEGO bieżącej pozycji (ten sam promień co w 3D -
+                    // src/PowerUpSystem.js#destroyTrailSegment).
+                    const radius = 5;
+                    opponent.trail = opponent.trail.filter(
+                        c => Math.hypot(c.x - opponent.x, c.y - opponent.y) >= radius
+                    );
+                    break;
+                }
+            }
+            powerUpsCollectedThisRound++;
+        }
+
+        function updatePowerUpHud() {
+            const now = performance.now();
+            renderEffectsRow(p1EffectsEl, p1, now);
+            renderEffectsRow(p2EffectsEl, p2, now);
+        }
+
+        function renderEffectsRow(el, player, now) {
+            const chips = [];
+            if (player.shieldUntil && now < player.shieldUntil) {
+                chips.push(`<span class="effect-chip" style="color:${POWERUP_TYPES.shield.color}">🛡 ${Math.ceil((player.shieldUntil - now) / 1000)}s</span>`);
+            }
+            if (player.speedUntil && now < player.speedUntil) {
+                chips.push(`<span class="effect-chip" style="color:${POWERUP_TYPES.speed.color}">⚡ ${Math.ceil((player.speedUntil - now) / 1000)}s</span>`);
+            }
+            if (player.ghostUntil && now < player.ghostUntil) {
+                chips.push(`<span class="effect-chip" style="color:${POWERUP_TYPES.ghost.color}">👻 ${Math.ceil((player.ghostUntil - now) / 1000)}s</span>`);
+            }
+            el.innerHTML = chips.join('');
         }
 
         // === WYBUCH DEREZZ ===
