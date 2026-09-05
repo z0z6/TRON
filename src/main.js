@@ -206,6 +206,16 @@ const achievementIconEl = document.getElementById('achievementIcon');
 const achievementNameEl = document.getElementById('achievementName');
 const achievementDescEl = document.getElementById('achievementDesc');
 
+const gameOverOverlayEl = document.getElementById('gameOverOverlay');
+const gameOverTitleEl = document.getElementById('gameOverTitle');
+const gameOverScoreEl = document.getElementById('gameOverScore');
+const gameOverRecordBadgeEl = document.getElementById('gameOverRecordBadge');
+const gameOverStatsGridEl = document.getElementById('gameOverStatsGrid');
+const gameOverAchievementsEl = document.getElementById('gameOverAchievements');
+const gameOverLifetimeEl = document.getElementById('gameOverLifetime');
+const gameOverCountdownEl = document.getElementById('gameOverCountdown');
+const gameOverContinueBtnEl = document.getElementById('gameOverContinueBtn');
+
 const achievementQueue = [];
 let achievementToastBusy = false;
 
@@ -232,6 +242,102 @@ game.achievementSystem.onAchievementUnlock = (achievement) => {
   achievementQueue.push(achievement);
   showNextAchievementToast();
 };
+
+// --- Ekran podsumowania rundy (wynik, statystyki, osiągnięcia, rekordy) ---
+// Najlepszy wynik trzymany osobno w localStorage - AchievementSystem już
+// persystuje statystyki życiowe (tron-stats) i odblokowane osiągnięcia
+// (tron-achievements), ale nie sam najwyższy wynik pojedynczej rundy.
+const BEST_SCORE_KEY = 'tron-best-score';
+const STAT_LABELS = {
+  timeSurvived: 'Czas przetrwania',
+  distanceTraveled: 'Dystans',
+  closeCalls: 'Close calle',
+  powerUpsCollected: 'Power-upy',
+  perfectTurns: 'Idealne skręty'
+};
+
+let gameOverResult = null; // dane z ostatniego game.onGameOver, do wyświetlenia w overlayu
+let wasGameOver = false;
+
+game.onGameOver = (result) => {
+  gameOverResult = result;
+};
+
+function buildGameOverContent(result) {
+  const scoring = game.scoringSystem.getStats();
+  const lifetime = game.achievementSystem.getStats();
+  const newlyUnlocked = game.achievementSystem.getNewlyUnlocked();
+
+  gameOverTitleEl.textContent = result.won ? 'WYGRANA' : 'PRZEGRANA';
+  gameOverTitleEl.className = result.won ? 'won' : 'lost';
+  gameOverScoreEl.textContent = scoring.score;
+
+  const bestScore = Number(localStorage.getItem(BEST_SCORE_KEY) || 0);
+  const isNewRecord = scoring.score > 0 && scoring.score > bestScore;
+  if (isNewRecord) localStorage.setItem(BEST_SCORE_KEY, String(scoring.score));
+  gameOverRecordBadgeEl.classList.toggle('show', isNewRecord);
+
+  gameOverStatsGridEl.innerHTML = '';
+  const rows = [
+    ['timeSurvived', `${scoring.stats.timeSurvived.toFixed(1)}s`],
+    ['distanceTraveled', `${scoring.stats.distanceTraveled.toFixed(0)}m`],
+    ['closeCalls', scoring.stats.closeCalls],
+    ['powerUpsCollected', scoring.stats.powerUpsCollected],
+    ['perfectTurns', scoring.stats.perfectTurns]
+  ];
+  for (const [key, value] of rows) {
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = STAT_LABELS[key];
+    const val = document.createElement('div');
+    val.className = 'value';
+    val.textContent = value;
+    gameOverStatsGridEl.appendChild(label);
+    gameOverStatsGridEl.appendChild(val);
+  }
+
+  if (newlyUnlocked.length > 0) {
+    gameOverAchievementsEl.style.display = '';
+    gameOverAchievementsEl.innerHTML = '';
+    for (const a of newlyUnlocked) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span class="icon">${a.icon}</span><div><div class="name">${a.name}</div><div class="desc">${a.description}</div></div>`;
+      gameOverAchievementsEl.appendChild(row);
+    }
+  } else {
+    gameOverAchievementsEl.style.display = 'none';
+  }
+
+  gameOverLifetimeEl.textContent =
+    `Rekord: ${Math.max(bestScore, scoring.score)} · Gier: ${lifetime.gamesPlayed} · Wygranych: ${lifetime.gamesWon} · Najdłuższe przetrwanie: ${lifetime.longestSurvival.toFixed(0)}s`;
+
+  gameOverCountdownEl.textContent = game.isMultiplayer
+    ? ''
+    : 'Kolejna runda zacznie się automatycznie za chwilę...';
+}
+
+function showGameOverOverlay() {
+  if (!gameOverResult) return;
+  buildGameOverContent(gameOverResult);
+  gameOverOverlayEl.classList.add('show');
+}
+
+function hideGameOverOverlay() {
+  gameOverOverlayEl.classList.remove('show');
+  gameOverResult = null;
+}
+
+gameOverContinueBtnEl.addEventListener('click', () => {
+  hideGameOverOverlay();
+  if (game.isMultiplayer) {
+    ensureMultiplayerConnected().then((connected) => {
+      if (connected) lobbyUI.show();
+    });
+  } else {
+    game.restart(game._currentDifficulty || 'medium');
+  }
+});
 
 function updateScoreHud() {
   const stats = game.scoringSystem.getStats();
@@ -281,7 +387,14 @@ function animate(currentTime) {
   
   game.update(deltaTime);
   updateScoreHud();
-  
+
+  if (game.gameOver && !wasGameOver) {
+    showGameOverOverlay();
+  } else if (!game.gameOver && wasGameOver) {
+    hideGameOverOverlay();
+  }
+  wasGameOver = game.gameOver;
+
   composer.render();
 }
 
