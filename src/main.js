@@ -282,6 +282,8 @@ function applyViewportSize() {
   camera.aspect = size.width / size.height;
   camera.updateProjectionMatrix();
   renderer.setSize(size.width, size.height);
+  composer.setSize(size.width, size.height);
+  bloomPass.setSize(size.width, size.height);
 }
 
 window.addEventListener('resize', applyViewportSize);
