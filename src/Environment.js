@@ -30,12 +30,18 @@ export class SynthwaveEnvironment {
   }
 
   _buildFloorBase() {
-    // Lustrzana podłoga - jedna, ciągła tafla obejmująca zarówno arenę, jak
-    // i cały obszar, w którym stoją bryły tła (te sięgają teraz nawet do
-    // ~650-750 jednostek promienia - patrz BackgroundThemes.js), więc
-    // płaszczyzna musi być odpowiednio duża, żeby realnie je odbijać, a nie
-    // kończyć się w połowie drogi.
-    const geometry = new THREE.PlaneGeometry(1600, 1600);
+    // Lustro CELOWO MAŁE - dokładnie pod areną (90x90, patrz Grid(90,45) w
+    // main.js) plus niewielki margines. To jest właściwa naprawa "efektu
+    // tafli jeziora", nie kolejna maska na dużym lustrze: powierzchnia,
+    // która jest zarazem duża, płaska i lustrzana, ZAWSZE będzie czytana
+    // jako woda, niezależnie od tego, co się na nią nałoży - a próby
+    // maskowania dużego lustra (dwie poprzednie iteracje) same w sobie
+    // były źródłem realnych błędów (czarny zamiast białego stopień
+    // gradientu, promień wychodzący poza canvas). Zamiast maskować, po
+    // prostu nie budujemy dużej płaszczyzny - poza tym małym kwadratem
+    // NIE MA żadnej geometrii, żadnego koloru - czysta pustka aż do brył
+    // tła (patrz BackgroundThemes.js), które stoją setki jednostek dalej.
+    const geometry = new THREE.PlaneGeometry(130, 130);
     this.floorBase = new Reflector(geometry, {
       color: 0x2c2c5e,
       textureWidth: 2048,
