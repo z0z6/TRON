@@ -23,6 +23,56 @@ function disposeAwareAdd(group, obj) {
   return obj;
 }
 
+// === CIENIOWANIE GRADIENTOWE WG WYSOKOŚCI ŚWIATA (poniżej horyzontu) ===
+// Wcześniejsze podejście (światło punktowe nad areną) dawało zanikanie wg
+// ODLEGŁOŚCI OD PUNKTU, nie wg WYSOKOŚCI względem horyzontu - w praktyce
+// nie dawało widocznego, spójnego gradientu, tylko wciąż ostre przejście
+// tam, gdzie geometria znikała za nieprzezroczystym Reflectorem podłogi
+// (Environment.js). To rozwiązuje problem u źródła: wstrzykuje do shadera
+// materiału (onBeforeCompile - standardowe API Three.js, bez zewnętrznych
+// zależności) mnożnik jasności liczony wprost z WSPÓŁRZĘDNEJ Y W PRZESTRZENI
+// ŚWIATA każdego fragmentu - pełna jasność przy y >= fadeStartY (horyzont,
+// czyli poziom posadzki), płynne (smoothstep - naprawdę gradientowe, nie
+// liniowe) przejście do całkowitej czerni przy y <= fadeEndY.
+//
+// Działa identycznie dla MeshStandardMaterial (budynki classic) i
+// MeshBasicMaterial/LineBasicMaterial (strumienie matrix, grzbiety
+// synthwave) - w Three.js WSZYSTKIE trzy kompilują się z tych samych
+// modułowych fragmentów shaderów (#include <common>, <project_vertex>,
+// <color_fragment>), więc jeden hak obsługuje wszystkie użyte tu materiały.
+// Obsługuje też InstancedMesh (budynki) - #ifdef USE_INSTANCING uwzględnia
+// macierz KONKRETNEJ instancji, nie tylko wspólnej geometrii bazowej.
+function applyHorizonFade(material, fadeStartY, fadeEndY) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.fadeStartY = { value: fadeStartY };
+    shader.uniforms.fadeEndY = { value: fadeEndY };
+
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vWorldY;')
+      .replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+#ifdef USE_INSTANCING
+  vWorldY = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).y;
+#else
+  vWorldY = (modelMatrix * vec4(transformed, 1.0)).y;
+#endif`
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nvarying float vWorldY;\nuniform float fadeStartY;\nuniform float fadeEndY;'
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+  diffuseColor.rgb *= smoothstep(fadeEndY, fadeStartY, vWorldY);`
+      );
+  };
+  material.needsUpdate = true;
+}
+
 // Ta sama wysokość co Reflector w Environment.js - punkt odniesienia dla
 // "zakopywania" elementów tła pod posadzkę (patrz buryBelowFloor niżej).
 const FLOOR_Y = -0.55;
@@ -93,6 +143,11 @@ function buildClassicBackground() {
       emissiveIntensity: 0.15, // odrobina "własnego" blasku, żeby ciemna strona budynku nie ginęła całkiem w czerni
       fog: true
     });
+    // Cieniowanie zaczyna się DOKŁADNIE na horyzoncie (y=0, poziom posadzki)
+    // i gradientowo gaśnie do y=-90 - budynek jest w pełni widoczny i
+    // oświetlony powyżej horyzontu, a jego "zakopana" część (patrz
+    // buryBelowFloor niżej) płynnie znika w cieniu zamiast być ostro ucięta.
+    applyHorizonFade(material, 0, -90);
     const layer = new THREE.InstancedMesh(geometry, material, count);
     layer.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     const dummy = new THREE.Object3D();
@@ -156,9 +211,9 @@ function buildClassicBackground() {
 
   // Trzy warstwy głębi zamiast dwóch - bliska, średnia, daleka - więcej
   // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery.
-  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x22225c, spires: true, buried: [20, 55] });
-  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x141438, spires: true, buried: [30, 80] });
-  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x0c0c26, buried: [40, 110] });
+  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x22225c, spires: true, buried: [60, 100] });
+  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x141438, spires: true, buried: [70, 110] });
+  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x0c0c26, buried: [90, 140] });
 
   // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
   // statyczne) - patrz updateClassicBackground(). Znacznie więcej niż
@@ -334,13 +389,14 @@ function buildSynthwaveBackground() {
     for (let i = 0; i < points.length - 1; i++) {
       positions.push(points[i].x, points[i].y, points[i].z, points[i + 1].x, points[i + 1].y, points[i + 1].z);
       if (i % 2 === 0) {
-        const buriedDepth = -(20 + rand() * 35);
+        const buriedDepth = -(40 + rand() * 35);
         positions.push(points[i].x, points[i].y, points[i].z, points[i].x, buriedDepth, points[i].z);
       }
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85, fog: true });
+    applyHorizonFade(material, 0, -75); // iglice grzbietu schodzą do ok. -75 (patrz buriedDepth wyżej)
     return new THREE.LineSegments(geometry, material);
   }
 
@@ -403,7 +459,7 @@ function buildMatrixBackground() {
       const visibleHeight = heightMin + rand() * (heightMax - heightMin);
       // Cylinder: strumień ciągnie się daleko pod posadzkę, nie tylko do
       // jej poziomu.
-      const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 20, 60);
+      const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 50, 100);
 
       const texture = baseTexture.clone();
       texture.needsUpdate = true;
@@ -414,6 +470,7 @@ function buildMatrixBackground() {
         map: texture, transparent: true, opacity,
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
       });
+      applyHorizonFade(material, 0, -90);
       const width = widthMin + rand() * (widthMax - widthMin);
       const geometry = new THREE.PlaneGeometry(width, totalHeight);
 
