@@ -88,6 +88,19 @@ function applyHorizonFade(material, fadeStartY, fadeEndY) {
 // "zakopywania" elementów tła pod posadzkę (patrz buryBelowFloor niżej).
 const FLOOR_Y = -0.55;
 
+// Arena to Grid(90, 45) w main.js - dłuższa krawędź = 90. Bryły tła (classic/
+// synthwave/matrix) stoją w odległości KILKUKROTNOŚCI tej wartości od
+// areny, a przestrzeń między nimi zostaje CAŁKOWICIE pusta (żaden floor,
+// żaden cień - patrz _buildHorizonFadeMask w Environment.js, który maskuje
+// nieskończone lustro podłogi dokładnie na granicy areny). Rozmieszczenie
+// eliptyczne (nie kołowe) - szersze wzdłuż X niż Z.
+const ARENA_EDGE = 90;
+const ELLIPSE_X = 1.35;
+const ELLIPSE_Z = 0.8;
+function ellipsePoint(angle, radius) {
+  return { x: Math.cos(angle) * radius * ELLIPSE_X, z: Math.sin(angle) * radius * ELLIPSE_Z };
+}
+
 // === EFEKT "CYLINDRA" ===
 // Rozszerza pion elementu W DÓŁ, POD poziom podłogi, zachowując jego
 // pierwotny "widoczny" wierzchołek na tej samej wysokości co wcześniej.
@@ -189,7 +202,7 @@ function buildClassicBackground() {
       const width = 6 + rand() * 14;
       const depth = 6 + rand() * 14;
       const height = heightMin + rand() * (heightMax - heightMin);
-      const px = Math.cos(angle) * radius, pz = Math.sin(angle) * radius;
+      const { x: px, z: pz } = ellipsePoint(angle, radius);
 
       // Efekt "cylindra" - budynek sięga daleko POD posadzkę, nie tylko do
       // jej poziomu, żeby scena wyglądała jak wnętrze wielkiej rury, w
@@ -227,9 +240,9 @@ function buildClassicBackground() {
 
   // Trzy warstwy głębi zamiast dwóch - bliska, średnia, daleka - więcej
   // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery.
-  addLayer({ count: 60, radiusMin: 48, radiusMax: 120, heightMin: 22, heightMax: 95, color: 0x4a4ab8, spires: true, buried: [220, 340] });
-  addLayer({ count: 75, radiusMin: 120, radiusMax: 250, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380] });
-  addLayer({ count: 60, radiusMin: 250, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
+  addLayer({ count: 60, radiusMin: 300, radiusMax: 380, heightMin: 22, heightMax: 95, color: 0x4a4ab8, spires: true, buried: [220, 340] });
+  addLayer({ count: 75, radiusMin: 380, radiusMax: 500, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380] });
+  addLayer({ count: 60, radiusMin: 500, radiusMax: 650, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
 
   // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
   // statyczne) - patrz updateClassicBackground(). Znacznie więcej niż
@@ -399,7 +412,8 @@ function buildSynthwaveBackground() {
     for (let i = 0; i <= segments; i++) {
       const angle = i * step;
       const h = baseHeight * (0.4 + rand() * 0.6);
-      points.push(new THREE.Vector3(Math.cos(angle) * radius, h, Math.sin(angle) * radius));
+      const { x: rx, z: rz } = ellipsePoint(angle, radius);
+      points.push(new THREE.Vector3(rx, h, rz));
     }
     const positions = [];
     for (let i = 0; i < points.length - 1; i++) {
@@ -420,9 +434,9 @@ function buildSynthwaveBackground() {
   }
 
   // Trzy grzbiety zamiast dwóch - bliski/średni/daleki (więcej głębi/detalu).
-  disposeAwareAdd(group, buildRidge(190, 45, 0xff2f9e, 24));
-  disposeAwareAdd(group, buildRidge(240, 65, 0x00eaff, 28));
-  disposeAwareAdd(group, buildRidge(310, 100, 0xff2f9e, 22));
+  disposeAwareAdd(group, buildRidge(320, 55, 0xff2f9e, 24));
+  disposeAwareAdd(group, buildRidge(420, 80, 0x00eaff, 28));
+  disposeAwareAdd(group, buildRidge(560, 120, 0xff2f9e, 22));
 
   disposeAwareAdd(group, buildStarfield(rand, 220, 0xffffff, 80, 400, 60, 220));
 
@@ -503,7 +517,8 @@ function buildMatrixBackground() {
       const plane2 = new THREE.Mesh(geometry, material);
       plane2.rotation.y = Math.PI / 2;
       cross.add(plane1, plane2);
-      cross.position.set(Math.cos(angle) * radius, centerY, Math.sin(angle) * radius);
+      const { x: sx, z: sz } = ellipsePoint(angle, radius);
+      cross.position.set(sx, centerY, sz);
       disposeAwareAdd(group, cross);
 
       const cycleDuration = 5 + rand() * 12;
@@ -518,10 +533,10 @@ function buildMatrixBackground() {
   }
 
   // Bliższa warstwa - mniej strumieni, ale szersze, jaśniejsze i szybsze.
-  addLayer(46, 48, 150, 55, 100, 0.9, 20, 45, 5, 9);
+  addLayer(46, 300, 400, 55, 100, 0.9, 20, 45, 5, 9);
   // Dalsza warstwa - więcej, drobniejsze, wolniejsze i przygaszone (głębia,
   // paralaksa przy skręcaniu kamery).
-  addLayer(64, 150, 300, 70, 150, 0.42, 8, 20, 6, 12);
+  addLayer(64, 400, 600, 70, 150, 0.42, 8, 20, 6, 12);
 
   group.userData.matrixColumns = columns;
   return group;
