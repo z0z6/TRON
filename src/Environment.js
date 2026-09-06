@@ -85,7 +85,11 @@ export class SynthwaveEnvironment {
     // przystanek (512*0.85=435px) WYCHODZIŁ POZA canvas (max promień 256px)
     // i nigdy nie osiągał realnej pełnej nieprzezroczystości - to był drugi,
     // niezależny błąd pogłębiający tę samą ciemną, "pustą" przestrzeń.
-    const gradient = ctx.createRadialGradient(c, c, 77, c, c, 93);
+    // Promienie przeliczone dla nowego rozmiaru płaszczyzny (patrz
+    // PlaneGeometry niżej, 500 zamiast 320) - canvas 512px mapuje się teraz
+    // na 500 jednostek świata (nie 320), więc te same docelowe promienie
+    // świata (~48/~58) odpowiadają innym pikselom niż wcześniej.
+    const gradient = ctx.createRadialGradient(c, c, 49, c, c, 59);
     gradient.addColorStop(0, 'rgba(0,0,0,0)');
     gradient.addColorStop(1, 'rgba(255,255,255,1)'); // BIAŁY, nie czarny - kolor tekstury mnoży się przez material.color (setHorizonFadeColor), więc czarny zawsze dawałby czarny wynik niezależnie od koloru motywu - to był realny błąd dający niedopasowaną, twardą krawędź zamiast płynnego zlania się z tłem
     ctx.fillStyle = gradient;
@@ -99,7 +103,7 @@ export class SynthwaveEnvironment {
       color: 0x0c0420, // nadpisywane przez setHorizonFadeColor() zgodnie z theme.bg
       fog: false
     });
-    const geometry = new THREE.PlaneGeometry(320, 320);
+    const geometry = new THREE.PlaneGeometry(500, 500);
     this.horizonFade = new THREE.Mesh(geometry, material);
     this.horizonFade.rotation.x = -Math.PI / 2;
     this.horizonFade.position.y = -0.54; // tuż nad Reflectorem (-0.55)
