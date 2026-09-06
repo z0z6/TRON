@@ -59,6 +59,15 @@ function applyHorizonFade(material, fadeStartY, fadeEndY) {
 #endif`
       );
 
+    // MeshStandardMaterial liczy poświatę emisyjną (totalEmissiveRadiance)
+    // NIEZALEŻNIE od diffuseColor - samo ściemnianie diffuseColor (jak
+    // niżej) zostawiało budynki classic (emissiveIntensity: 0.15)
+    // "prześwitujące" niewygaszoną emisją nawet głęboko pod areną, przez co
+    // cały efekt był praktycznie niewidoczny. MeshBasicMaterial/
+    // LineBasicMaterial (matrix, synthwave) nie mają tej zmiennej wcale -
+    // stąd warunkowe dopisanie tylko tam, gdzie faktycznie istnieje.
+    const hasEmissive = shader.fragmentShader.includes('totalEmissiveRadiance');
+
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
@@ -67,7 +76,9 @@ function applyHorizonFade(material, fadeStartY, fadeEndY) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-  diffuseColor.rgb *= smoothstep(fadeEndY, fadeStartY, vWorldY);`
+  float horizonFadeFactor = smoothstep(fadeEndY, fadeStartY, vWorldY);
+  diffuseColor.rgb *= horizonFadeFactor;
+  ${hasEmissive ? 'totalEmissiveRadiance *= horizonFadeFactor;' : ''}`
       );
   };
   material.needsUpdate = true;
