@@ -78,7 +78,7 @@ export class SynthwaveEnvironment {
     // gdzie tekstura jest już w pełni nieprzezroczysta.
     const gradient = ctx.createRadialGradient(c, c, 512 * 0.35, c, c, 512 * 0.85);
     gradient.addColorStop(0, 'rgba(0,0,0,0)');
-    gradient.addColorStop(1, 'rgba(0,0,0,1)');
+    gradient.addColorStop(1, 'rgba(255,255,255,1)'); // BIAŁY, nie czarny - kolor tekstury mnoży się przez material.color (setHorizonFadeColor), więc czarny zawsze dawałby czarny wynik niezależnie od koloru motywu - to był realny błąd dający niedopasowaną, twardą krawędź zamiast płynnego zlania się z tłem
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 512, 512);
 
