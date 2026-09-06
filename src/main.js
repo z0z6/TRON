@@ -1,0 +1,587 @@
+import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { Game } from './Game.js';
+import { Grid } from './Grid.js';
+import { MultiplayerManager } from './MultiplayerManager.js';
+import { LobbyUI } from './LobbyUI.js';
+import { SynthwaveEnvironment } from './Environment.js';
+import { preloadLightCycleTemplate } from './LightCycleModel.js';
+
+const scene = new THREE.Scene();
+
+function hexToNum(hex) {
+  return parseInt(hex.replace('#', ''), 16);
+}
+
+// window.__tronTheme jest już ustawione przez skrypt theme-picker w
+// index.html (klasyczny, nie modułowy <script> na samej górze body -
+// wykonuje się PRZED tym, odroczonym, modułem, patrz komentarz w index.html
+// przy orientation-lock, ten sam mechanizm dotyczy motywu).
+const initialTheme = window.__tronTheme || { p1: '#00f3ff', p2: '#ff0055', bg: '#0c0420' };
+scene.background = new THREE.Color(hexToNum(initialTheme.bg));
+
+function getRenderSize() {
+  if (typeof window.__getFieldSize === 'function') {
+    return window.__getFieldSize();
+  }
+  return { width: window.innerWidth, height: window.innerHeight };
+}
+
+const initialSize = getRenderSize();
+
+const camera = new THREE.PerspectiveCamera(
+  75,
+  initialSize.width / initialSize.height,
+  0.1,
+  1000
+);
+camera.position.set(0, 45, 75);
+camera.lookAt(0, 8, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(initialSize.width, initialSize.height);
+renderer.setPixelRatio(window.devicePixelRatio);
+// Renderuje do #gameCanvasWrap (zwężonego o marginesy na sterowanie dotykowe
+// - patrz orientation-lock w index.html), a nie bezpośrednio do <body>, żeby
+// motocykl nigdy nie jeździł "pod" D-Padem/klawiszami funkcyjnymi.
+(document.getElementById('gameCanvasWrap') || document.body).appendChild(renderer.domElement);
+// --- Post-processing: bloom na neonach (ślady, motocykl, siatka) ---
+// UnrealBloomPass rozjaśnia i "rozlewa" najjaśniejsze piksele klatki - przy
+// ciemnym tle i jasnych, addytywnie mieszanych kolorach neonów (Trail.js,
+// grid.frag) daje efekt świecenia bez zmiany ani jednego materiału w grze.
+const composer = new EffectComposer(renderer);
+composer.setSize(initialSize.width, initialSize.height);
+composer.setPixelRatio(window.devicePixelRatio);
+
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(initialSize.width, initialSize.height),
+  0.45,  // strength - siła poświaty (było 0.9 - przycięte prawie o połowę)
+  0.35,  // radius - promień rozmycia (było 0.5 - węższa, mniej "rozlana" poświata)
+  0.45   // threshold - im wyżej, tym MNIEJ rzeczy zaczyna świecić (było 0.15)
+);
+composer.addPass(bloomPass);
+
+// OutputPass dba o poprawne kodowanie kolorów/tone mapping na wyjściu -
+// bez tego bloom potrafi "wypłukać" kolory.
+composer.addPass(new OutputPass());
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(10, 20, 10);
+scene.add(directionalLight);
+
+// Światło uzupełniające (fill/rim) z przeciwnej strony, chłodniejsze i
+// słabsze - samo ambient+directional spłaszczało budynki tła (patrz
+// BackgroundThemes.js) do jednej, dobrze oświetlonej strony i głębokiego
+// cienia po drugiej. Ten drugi kierunek dorzuca odrobinę światła w cień,
+// więc widać więcej kształtu (krawędzie, narożniki) zamiast czystej czerni.
+const fillLight = new THREE.DirectionalLight(0x88aaff, 0.25);
+fillLight.position.set(-15, 10, -10);
+scene.add(fillLight);
+
+const environment = new SynthwaveEnvironment(scene);
+environment.setFogColor(hexToNum(initialTheme.bg));
+environment.setTheme(window.__tronThemeKey || 'classic');
+
+const grid = new Grid(90, 45); // dopasowane do rzeczywistej granicy planszy (±45, patrz Game.js/AI.js)
+grid.setColor(hexToNum(initialTheme.p1));
+grid.setGlowColors(hexToNum(initialTheme.p1), hexToNum(initialTheme.p2));
+scene.add(grid.mesh);
+
+// Model motocykla (GLTF, LightCycleModel.js) wczytuje się asynchronicznie -
+// czekamy na niego RAZ tutaj, żeby createLightCycleMesh() (wywoływane z
+// Game.js/AI.js/RemotePlayer.js) mogło zostać zwykłą, synchroniczną
+// funkcją wszędzie indziej. Plik jest mały (~275KB, bez tekstur), więc to
+// praktycznie niezauważalne opóźnienie startu.
+//
+// Reszta inicjalizacji (gracz/AI, HUD, sterowanie, pętla animacji) jest
+// owinięta w async IIFE zamiast top-level await - target builda (Vite,
+// patrz vite.config.js) obejmuje starsze przeglądarki bez wsparcia dla
+// top-level await w module scope.
+(async () => {
+  await preloadLightCycleTemplate();
+
+  const game = new Game(scene, camera);
+  game.initPlayer(undefined, hexToNum(initialTheme.p1));
+  game.initOpponent(new THREE.Vector3(15, 0, 0), hexToNum(initialTheme.p2), 'medium');
+
+  // Zmiana motywu w UI (theme-picker w index.html) działa NA ŻYWO - nie trzeba
+  // czekać do kolejnej rundy. Nasłuchujemy zdarzenia wysyłanego przez ten
+  // przełącznik i przemalowujemy tło, siatkę oraz istniejące już
+  // gracz/przeciwnik/ślady (patrz Game.applyThemeColors).
+  window.addEventListener('tron-theme-change', (e) => {
+    const theme = e.detail;
+    if (!theme) return;
+    scene.background = new THREE.Color(hexToNum(theme.bg));
+    environment.setFogColor(hexToNum(theme.bg));
+    environment.setTheme(window.__tronThemeKey || 'classic');
+    grid.setColor(hexToNum(theme.p1));
+    grid.setGlowColors(hexToNum(theme.p1), hexToNum(theme.p2));
+    game.applyThemeColors(hexToNum(theme.p1), hexToNum(theme.p2));
+  });
+
+  // --- Multiplayer ---
+  const multiplayerManager = new MultiplayerManager();
+  const lobbyUI = new LobbyUI(multiplayerManager);
+  game.multiplayerManager = multiplayerManager;
+
+  // Adres serwera multiplayer - GitHub Pages nie uruchamia Node.js, więc
+  // backend (server.js) trzeba wdrożyć osobno (np. Render, Railway, Fly.io) i
+  // wskazać jego adres przez ?server=https://twoj-serwer.example.com w URL-u
+  // strony. Domyślnie zakłada lokalny serwer deweloperski.
+  const urlParams = new URLSearchParams(window.location.search);
+  const MULTIPLAYER_SERVER_URL = urlParams.get('server') || 'http://localhost:3000';
+
+  let multiplayerConnectAttempted = false;
+
+  async function ensureMultiplayerConnected() {
+    if (multiplayerManager.isConnected) return true;
+    if (multiplayerConnectAttempted) return multiplayerManager.isConnected;
+    multiplayerConnectAttempted = true;
+
+    lobbyUI.updateStatus('Łączenie z serwerem...');
+    try {
+      await multiplayerManager.connect(MULTIPLAYER_SERVER_URL);
+      lobbyUI.updateStatus('Połączono. Utwórz pokój lub dołącz do istniejącego.');
+      return true;
+    } catch (err) {
+      console.error('Nie udało się połączyć z serwerem multiplayer:', err);
+      lobbyUI.showError('Brak połączenia z serwerem. Sprawdź adres serwera (?server=...) i spróbuj ponownie.');
+      multiplayerConnectAttempted = false; // pozwól spróbować ponownie przy kolejnym otwarciu lobby
+      return false;
+    }
+  }
+
+  multiplayerManager.onPlayerJoined = () => {
+    lobbyUI.showStartButton();
+  };
+
+  multiplayerManager.onPlayerLeft = () => {
+    lobbyUI.updateStatus('Przeciwnik opuścił pokój.');
+    // Jeśli mecz trwał, a przeciwnik zniknął z sieci - traktujemy to jak
+    // automatyczną wygraną (nie ma z kim dalej grać).
+    if (game.isMultiplayer && game.isStarted && !game.gameOver) {
+      game.handleOpponentDeath();
+    }
+  };
+
+  multiplayerManager.onGameStart = () => {
+    lobbyUI.hide();
+    game.startMultiplayer(multiplayerManager.isHost);
+  };
+
+  multiplayerManager.onPlayerInput = (data) => {
+    if (game.opponent && typeof game.opponent.applyRemoteInput === 'function') {
+      game.opponent.applyRemoteInput(data.action);
+    }
+  };
+
+  multiplayerManager.onGameEnd = (data) => {
+    // Własna śmierć zawsze rozstrzyga mecz lokalnie jako pierwsza (patrz
+    // Game.js#handlePlayerDeath) - jeśli to zdarzenie przyszło już PO tym,
+    // po prostu je ignorujemy (gameOver już true). W przeciwnym razie ufamy
+    // przeciwnikowi, że to on wykrył kolizję pierwszy.
+    if (game.gameOver) return;
+
+    const localPlayerWon =
+      (data.winner === 'host' && multiplayerManager.isHost) ||
+      (data.winner === 'guest' && !multiplayerManager.isHost);
+
+    if (localPlayerWon) {
+      game.handleOpponentDeath();
+    } else {
+      game.handlePlayerDeath();
+    }
+  };
+
+  multiplayerManager.onError = (error) => {
+    lobbyUI.showError(`Błąd sieci: ${error.message || error}`);
+  };
+
+  let lastTime = performance.now();
+
+  const scoreValueEl = document.getElementById('scoreValue');
+  const comboValueEl = document.getElementById('comboValue');
+  const effectsHudEl = document.getElementById('effectsHud');
+  const toastHudEl = document.getElementById('toastHud');
+  const touchStartBtnEl = document.getElementById('touchStartBtn');
+
+  const EFFECT_LABELS = {
+    shield: '🛡️ TARCZA',
+    speed: '⚡ PRĘDKOŚĆ',
+    ghost: '👻 DUCH',
+    bomb: '💣 BOMBA'
+  };
+
+  // --- Toast osiągnięć ---
+  // Kolejka na wypadek odblokowania kilku osiągnięć w tej samej klatce (np. przy
+  // pierwszej wygranej, gdy kilka warunków spełnia się naraz) - pokazujemy je
+  // jedno po drugim, zamiast nadpisywać.
+  const achievementToastEl = document.getElementById('achievementToast');
+  const achievementIconEl = document.getElementById('achievementIcon');
+  const achievementNameEl = document.getElementById('achievementName');
+  const achievementDescEl = document.getElementById('achievementDesc');
+
+  const gameOverOverlayEl = document.getElementById('gameOverOverlay');
+  const gameOverTitleEl = document.getElementById('gameOverTitle');
+  const gameOverScoreEl = document.getElementById('gameOverScore');
+  const gameOverRecordBadgeEl = document.getElementById('gameOverRecordBadge');
+  const gameOverStatsGridEl = document.getElementById('gameOverStatsGrid');
+  const gameOverAchievementsEl = document.getElementById('gameOverAchievements');
+  const gameOverLifetimeEl = document.getElementById('gameOverLifetime');
+  const gameOverCountdownEl = document.getElementById('gameOverCountdown');
+  const gameOverContinueBtnEl = document.getElementById('gameOverContinueBtn');
+
+  const achievementQueue = [];
+  let achievementToastBusy = false;
+
+  function showNextAchievementToast() {
+    if (achievementToastBusy || achievementQueue.length === 0) return;
+    achievementToastBusy = true;
+
+    const achievement = achievementQueue.shift();
+    achievementIconEl.textContent = achievement.icon;
+    achievementNameEl.textContent = `OSIĄGNIĘCIE: ${achievement.name}`;
+    achievementDescEl.textContent = achievement.description;
+    achievementToastEl.classList.add('show');
+
+    setTimeout(() => {
+      achievementToastEl.classList.remove('show');
+      setTimeout(() => {
+        achievementToastBusy = false;
+        showNextAchievementToast();
+      }, 400); // czas na dokończenie animacji fade-out przed pokazaniem kolejnego
+    }, 3500);
+  }
+
+  game.achievementSystem.onAchievementUnlock = (achievement) => {
+    achievementQueue.push(achievement);
+    showNextAchievementToast();
+  };
+
+  // --- Ekran podsumowania rundy (wynik, statystyki, osiągnięcia, rekordy) ---
+  // Najlepszy wynik trzymany osobno w localStorage - AchievementSystem już
+  // persystuje statystyki życiowe (tron-stats) i odblokowane osiągnięcia
+  // (tron-achievements), ale nie sam najwyższy wynik pojedynczej rundy.
+  const BEST_SCORE_KEY = 'tron-best-score';
+  const STAT_LABELS = {
+    timeSurvived: 'Czas przetrwania',
+    distanceTraveled: 'Dystans',
+    closeCalls: 'Close calle',
+    powerUpsCollected: 'Power-upy',
+    perfectTurns: 'Idealne skręty'
+  };
+
+  let gameOverResult = null; // dane z ostatniego game.onGameOver, do wyświetlenia w overlayu
+  let wasGameOver = false;
+  // Pauza - funkcja NOWA w 3D (2D już ją miało). Zamrożenie polega na
+  // pominięciu game.update() w animate() poniżej - dekoracyjne animacje tła
+  // (siatka/środowisko) świadomie lecą dalej, żeby ekran nie wyglądał na
+  // "martwy" podczas pauzy.
+  let isPaused = false;
+  const pauseOverlayEl = document.getElementById('pauseOverlay');
+
+  function togglePause() {
+    if (!game.isStarted || game.gameOver) return; // nie ma czego pauzować na ekranie startowym/po końcu rundy
+    isPaused = !isPaused;
+    pauseOverlayEl.classList.toggle('show', isPaused);
+  }
+
+  game.onGameOver = (result) => {
+    gameOverResult = result;
+  };
+
+  function buildGameOverContent(result) {
+    const scoring = game.scoringSystem.getStats();
+    const lifetime = game.achievementSystem.getStats();
+    const newlyUnlocked = game.achievementSystem.getNewlyUnlocked();
+
+    gameOverTitleEl.textContent = result.won ? 'WYGRANA' : 'PRZEGRANA';
+    gameOverTitleEl.className = result.won ? 'won' : 'lost';
+    gameOverScoreEl.textContent = scoring.score;
+
+    const bestScore = Number(localStorage.getItem(BEST_SCORE_KEY) || 0);
+    const isNewRecord = scoring.score > 0 && scoring.score > bestScore;
+    if (isNewRecord) localStorage.setItem(BEST_SCORE_KEY, String(scoring.score));
+    gameOverRecordBadgeEl.classList.toggle('show', isNewRecord);
+
+    gameOverStatsGridEl.innerHTML = '';
+    const rows = [
+      ['timeSurvived', `${scoring.stats.timeSurvived.toFixed(1)}s`],
+      ['distanceTraveled', `${scoring.stats.distanceTraveled.toFixed(0)}m`],
+      ['closeCalls', scoring.stats.closeCalls],
+      ['powerUpsCollected', scoring.stats.powerUpsCollected],
+      ['perfectTurns', scoring.stats.perfectTurns]
+    ];
+    for (const [key, value] of rows) {
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = STAT_LABELS[key];
+      const val = document.createElement('div');
+      val.className = 'value';
+      val.textContent = value;
+      gameOverStatsGridEl.appendChild(label);
+      gameOverStatsGridEl.appendChild(val);
+    }
+
+    if (newlyUnlocked.length > 0) {
+      gameOverAchievementsEl.style.display = '';
+      gameOverAchievementsEl.innerHTML = '';
+      for (const a of newlyUnlocked) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `<span class="icon">${a.icon}</span><div><div class="name">${a.name}</div><div class="desc">${a.description}</div></div>`;
+        gameOverAchievementsEl.appendChild(row);
+      }
+    } else {
+      gameOverAchievementsEl.style.display = 'none';
+    }
+
+    gameOverLifetimeEl.textContent =
+      `Rekord: ${Math.max(bestScore, scoring.score)} · Gier: ${lifetime.gamesPlayed} · Wygranych: ${lifetime.gamesWon} · Najdłuższe przetrwanie: ${lifetime.longestSurvival.toFixed(0)}s`;
+
+    gameOverCountdownEl.textContent = game.isMultiplayer
+      ? ''
+      : 'Kolejna runda zacznie się automatycznie za chwilę...';
+  }
+
+  function showGameOverOverlay() {
+    if (!gameOverResult) return;
+    buildGameOverContent(gameOverResult);
+    gameOverOverlayEl.classList.add('show');
+  }
+
+  function hideGameOverOverlay() {
+    gameOverOverlayEl.classList.remove('show');
+    gameOverResult = null;
+  }
+
+  gameOverContinueBtnEl.addEventListener('click', () => {
+    hideGameOverOverlay();
+    if (game.isMultiplayer) {
+      ensureMultiplayerConnected().then((connected) => {
+        if (connected) lobbyUI.show();
+      });
+    } else {
+      game.restart(game._currentDifficulty || 'medium');
+    }
+  });
+
+  function updateScoreHud() {
+    const stats = game.scoringSystem.getStats();
+
+    scoreValueEl.textContent = stats.score;
+    comboValueEl.textContent = stats.combo > 0 ? `COMBO x${stats.multiplier}` : '';
+
+    // Przycisk dotykowy START/URUCHOM CYKL ma sens tylko, dopóki runda się nie
+    // zaczęła - inaczej zostaje bezużytecznie na środku ekranu, zasłaniając
+    // widok gry (tap podczas gry i tak nic by nie zrobił, patrz guard w
+    // listenerze, ale wizualnie to zbędny bałagan).
+    touchStartBtnEl.style.display = game.isStarted ? 'none' : '';
+
+    const activeEffects = game.powerUpSystem.getActiveEffects();
+    effectsHudEl.innerHTML = '';
+    for (const effect of activeEffects) {
+      const el = document.createElement('div');
+      el.className = 'effect';
+      const seconds = Math.ceil(effect.remainingTime / 1000);
+      el.textContent = `${EFFECT_LABELS[effect.type] || effect.type} ${seconds}s`;
+      effectsHudEl.appendChild(el);
+    }
+
+    // Pokaż najnowszy "floating text" (np. "CLOSE CALL! +150") jako krótki toast
+    // zamiast pełnej animacji 3D - prostsze i równie czytelne.
+    const latest = stats.floatingTexts[stats.floatingTexts.length - 1];
+    if (latest) {
+      toastHudEl.textContent = latest.subtext ? `${latest.text} (${latest.subtext})` : latest.text;
+      toastHudEl.style.opacity = latest.opacity !== undefined ? latest.opacity : 1;
+    } else {
+      toastHudEl.textContent = '';
+    }
+  }
+
+  function animate(currentTime) {
+    requestAnimationFrame(animate);
+  
+    const deltaTime = (currentTime - lastTime) / 1000;
+    lastTime = currentTime;
+  
+    const timeInSeconds = currentTime * 0.001;
+    grid.updateRacerPositions(
+      game.player ? game.player.position : null,
+      game.opponent ? game.opponent.position : null
+    );
+    grid.update(timeInSeconds);
+    environment.update(timeInSeconds, deltaTime);
+  
+    if (!isPaused) game.update(deltaTime);
+    updateScoreHud();
+
+    if (game.gameOver && !wasGameOver) {
+      showGameOverOverlay();
+    } else if (!game.gameOver && wasGameOver) {
+      hideGameOverOverlay();
+    }
+    wasGameOver = game.gameOver;
+
+    composer.render();
+  }
+
+  animate(performance.now());
+
+  function applyViewportSize() {
+    const size = getRenderSize();
+    camera.aspect = size.width / size.height;
+    camera.updateProjectionMatrix();
+    renderer.setSize(size.width, size.height);
+    composer.setSize(size.width, size.height);
+    bloomPass.setSize(size.width, size.height);
+  }
+
+  window.addEventListener('resize', applyViewportSize);
+  window.addEventListener('game-viewport-resize', applyViewportSize);
+
+  // --- Sterowanie dotykowe (telefony/tablety) ---
+  // Te same akcje co klawiatura wyżej, tylko wywoływane dotykiem zamiast
+  // zdarzeń 'keydown'. Używamy touchstart (nie click), żeby uniknąć typowego
+  // dla mobile opóźnienia ~300ms między dotykiem a syntetycznym 'click'.
+  document.querySelectorAll('.dpad-btn').forEach((btn) => {
+    const action = btn.dataset.turn === 'left' ? 'turnLeft' : 'turnRight';
+    const press = (e) => {
+      e.preventDefault();
+      if (isPaused) return;
+      btn.classList.add('pressed');
+      game.handlePlayerInput(action);
+    };
+    const release = (e) => {
+      e.preventDefault();
+      btn.classList.remove('pressed');
+    };
+    btn.addEventListener('touchstart', press, { passive: false });
+    btn.addEventListener('touchend', release, { passive: false });
+    btn.addEventListener('touchcancel', release, { passive: false });
+    btn.addEventListener('click', press); // fallback np. do testów w DevTools
+  });
+
+  document.getElementById('touchStartBtn').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (!game.isStarted) game.startSinglePlayer('medium');
+  }, { passive: false });
+
+  document.getElementById('fnRestart3d').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    // Ta sama zasada co klawisz R - restart nie jest zsynchronizowany przez
+    // sieć, więc w multiplayer go blokujemy (patrz komentarz przy klawiszu R).
+    if (!game.isMultiplayer) game.restart('medium');
+  }, { passive: false });
+
+  document.getElementById('fnCamera3d').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    game.toggleCameraMode();
+  }, { passive: false });
+
+  document.getElementById('fnMute3d').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    game.toggleMute();
+  }, { passive: false });
+
+  document.getElementById('fnPause3d').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    togglePause();
+  }, { passive: false });
+
+  document.getElementById('fnLobby3d').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    ensureMultiplayerConnected().then((connected) => {
+      if (connected) lobbyUI.show();
+    });
+  }, { passive: false });
+
+  // Przycisk Esc / klawisz Escape - wyjście do ekranu wyboru trybu
+  // (../index.html). Potwierdzenie tylko wtedy, gdy runda faktycznie trwa -
+  // na ekranie startowym/po końcu rundy nie ma czego chronić przed
+  // przypadkową utratą postępu.
+  function exitToMenu() {
+    if (game.isStarted && !game.gameOver) {
+      if (!confirm('Opuścić grę i wrócić do menu?')) return;
+    }
+    window.location.href = '../index.html';
+  }
+  document.getElementById('escBtn').addEventListener('click', exitToMenu);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      exitToMenu();
+      return;
+    }
+
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      togglePause();
+      return;
+    }
+
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      if (!isPaused) game.handlePlayerInput('turnLeft');
+    }
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      if (!isPaused) game.handlePlayerInput('turnRight');
+    }
+  
+    if (e.key === ' ' || e.key === 'Enter') {
+      if (!game.isStarted) {
+        game.startSinglePlayer('medium');
+      }
+    }
+  
+    if (e.key === 'r' || e.key === 'R') {
+      // Restart nie jest zsynchronizowany przez sieć - w trybie multiplayer
+      // resetowałby pozycję lokalnie, podczas gdy prawdziwy przeciwnik nic by
+      // o tym nie wiedział i dalej jechał tam, gdzie faktycznie jest. Zamiast
+      // tego, po zakończonym meczu multiplayer, gracz wraca do lobby (patrz
+      // klawisz L) i zaczyna nowy mecz od nowego 'game-start'.
+      if (!game.isMultiplayer) {
+        game.restart('medium');
+      }
+    }
+  
+    if (e.key === 'c' || e.key === 'C') {
+      game.toggleCameraMode();
+    }
+  
+    if (e.key === 'm' || e.key === 'M') {
+      game.toggleMute();
+    }
+  
+    if (e.key === 'l' || e.key === 'L') {
+      ensureMultiplayerConnected().then((connected) => {
+        if (connected) lobbyUI.show();
+      });
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    game.dispose();
+    multiplayerManager.disconnect();
+  });
+
+  console.log(`
+  === TRON LIGHT CYCLES ===
+  Naciśnij SPACJĘ aby rozpocząć grę (single-player)
+  Strzałki/A,D: Skręcanie
+  R: Restart (tylko single-player)
+  C: Zmień kamerę
+  M: Wycisz dźwięk
+  L: Otwórz lobby multiplayer
+
+  Sprawdź konsolę dla debugowania!
+  `);
+})();
