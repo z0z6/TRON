@@ -105,9 +105,15 @@ export class SynthwaveEnvironment {
   // posadzką (patrz "zakopane" elementy w BackgroundThemes.js). Widoczne
   // TYLKO dla BOUNDED_SCENE_THEMES - glacier/amber mają swój własny,
   // niezależny sposób oświetlenia (patrz komentarze tam).
+  // Światło punktowe zawieszone nad środkiem sceny gry - obniżone do 0.6x
+  // długości areny (zamiast pełnej wysokości) i wzmocnione, po
+  // przetestowaniu w poglądowym modelu 3D: niżej i mocniej dawało wyraźnie
+  // czytelniejszy, gradientowy spadek jasności niż wersja zawieszona pełną
+  // wysokość wyżej. Kolor neutralny (biały) - w demie użyto czerwieni tylko
+  // żeby łatwiej było zobaczyć sam zasięg światła, nie jako docelowa barwa.
   _buildOverheadLight() {
-    this.overheadLight = new THREE.PointLight(0xffffff, 1.6, 0, 1.4);
-    this.overheadLight.position.set(0, ARENA_LENGTH, 0);
+    this.overheadLight = new THREE.PointLight(0xffffff, 3.2, 0, 1.4);
+    this.overheadLight.position.set(0, ARENA_LENGTH * 0.6, 0);
     this.overheadLight.visible = false;
     this.scene.add(this.overheadLight);
   }
