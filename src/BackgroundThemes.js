@@ -143,11 +143,16 @@ function buildClassicBackground() {
       emissiveIntensity: 0.15, // odrobina "własnego" blasku, żeby ciemna strona budynku nie ginęła całkiem w czerni
       fog: true
     });
-    // Cieniowanie zaczyna się DOKŁADNIE na horyzoncie (y=0, poziom posadzki)
-    // i gradientowo gaśnie do y=-90 - budynek jest w pełni widoczny i
-    // oświetlony powyżej horyzontu, a jego "zakopana" część (patrz
-    // buryBelowFloor niżej) płynnie znika w cieniu zamiast być ostro ucięta.
-    applyHorizonFade(material, 0, -90);
+    // Cieniowanie NIE zaczyna się na horyzoncie - większość budynku (część
+    // widoczna nad areną + prawie cały zakopany fragment) zostaje w pełnym,
+    // jednolitym kolorze. Gradient do czerni pojawia się dopiero tuż PRZY
+    // dnie fundamentu (połowa głębokości zakopania tej warstwy, szerszy,
+    // dając wrażenie budynków "gubiących się w mroku" bardzo głęboko pod
+    // areną, zamiast szerokiego, widocznego przejścia od samego horyzontu.
+    const maxBuried = buried[1];
+    const fadeEndY = -maxBuried;
+    const fadeStartY = -maxBuried * 0.5;
+    applyHorizonFade(material, fadeStartY, fadeEndY);
     const layer = new THREE.InstancedMesh(geometry, material, count);
     layer.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     const dummy = new THREE.Object3D();
@@ -211,9 +216,9 @@ function buildClassicBackground() {
 
   // Trzy warstwy głębi zamiast dwóch - bliska, średnia, daleka - więcej
   // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery.
-  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x22225c, spires: true, buried: [60, 100] });
-  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x141438, spires: true, buried: [70, 110] });
-  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x0c0c26, buried: [90, 140] });
+  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x22225c, spires: true, buried: [220, 340] });
+  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x141438, spires: true, buried: [260, 380] });
+  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x0c0c26, buried: [320, 460] });
 
   // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
   // statyczne) - patrz updateClassicBackground(). Znacznie więcej niż
@@ -389,14 +394,17 @@ function buildSynthwaveBackground() {
     for (let i = 0; i < points.length - 1; i++) {
       positions.push(points[i].x, points[i].y, points[i].z, points[i + 1].x, points[i + 1].y, points[i + 1].z);
       if (i % 2 === 0) {
-        const buriedDepth = -(40 + rand() * 35);
+        const buriedDepth = -(120 + rand() * 100);
         positions.push(points[i].x, points[i].y, points[i].z, points[i].x, buriedDepth, points[i].z);
       }
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85, fog: true });
-    applyHorizonFade(material, 0, -75); // iglice grzbietu schodzą do ok. -75 (patrz buriedDepth wyżej)
+    // Cieniowanie zaczyna się dopiero blisko dna iglic (nie od horyzontu) -
+    // ta sama zasada co przy budynkach classic (patrz applyHorizonFade
+    // wyżej i komentarz przy addLayer). Zakres iglic: -120 do -220.
+    applyHorizonFade(material, -110, -220);
     return new THREE.LineSegments(geometry, material);
   }
 
@@ -459,7 +467,7 @@ function buildMatrixBackground() {
       const visibleHeight = heightMin + rand() * (heightMax - heightMin);
       // Cylinder: strumień ciągnie się daleko pod posadzkę, nie tylko do
       // jej poziomu.
-      const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 50, 100);
+      const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 200, 350);
 
       const texture = baseTexture.clone();
       texture.needsUpdate = true;
@@ -470,7 +478,12 @@ function buildMatrixBackground() {
         map: texture, transparent: true, opacity,
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
       });
-      applyHorizonFade(material, 0, -90);
+      const buriedAmount = totalHeight - visibleHeight;
+      const bottomWorldY = centerY - totalHeight / 2;
+      // Cieniowanie zaczyna się blisko DNA TEGO KONKRETNEGO strumienia
+      // (znamy jego dokładną głębokość, w przeciwieństwie do InstancedMesh
+      // budynków classic, gdzie trzeba było przybliżać wg całej warstwy).
+      applyHorizonFade(material, bottomWorldY + buriedAmount * 0.5, bottomWorldY);
       const width = widthMin + rand() * (widthMax - widthMin);
       const geometry = new THREE.PlaneGeometry(width, totalHeight);
 
