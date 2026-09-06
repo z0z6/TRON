@@ -151,7 +151,7 @@ function buildClassicBackground() {
       roughness: 0.7,
       metalness: 0.2,
       emissive: color,
-      emissiveIntensity: 0.15, // odrobina "własnego" blasku, żeby ciemna strona budynku nie ginęła całkiem w czerni
+      emissiveIntensity: 0.5, // było 0.15 - budynki muszą mieć realny, widoczny blask, żeby w ogóle było co gradientować do czerni; zbyt ciemna baza + mgła na dystansie 300+ dawały praktycznie czarną sylwetkę niezależnie od cieniowania
       fog: true
     });
     // Cieniowanie NIE zaczyna się na horyzoncie - większość budynku (część
@@ -227,9 +227,9 @@ function buildClassicBackground() {
 
   // Trzy warstwy głębi zamiast dwóch - bliska, średnia, daleka - więcej
   // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery.
-  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x22225c, spires: true, buried: [220, 340] });
-  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x141438, spires: true, buried: [260, 380] });
-  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x0c0c26, buried: [320, 460] });
+  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x4a4ab8, spires: true, buried: [220, 340] });
+  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380] });
+  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
 
   // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
   // statyczne) - patrz updateClassicBackground(). Znacznie więcej niż
@@ -251,7 +251,7 @@ function buildClassicBackground() {
     const radius = 90 + rand() * 340;
     const height = 2 + rand() * 250;
     dummy.position.set(Math.cos(angle) * radius, height - 0.55, Math.sin(angle) * radius);
-    const s = 0.5 + rand() * 1.7;
+    const s = 1.2 + rand() * 3.2; // było 0.5-2.2 - za małe, żeby cokolwiek było widać z dystansu 90-430 jednostek
     dummy.scale.set(s, s * 0.35, 0.15);
     dummy.rotation.y = rand() * Math.PI;
     dummy.updateMatrix();
@@ -795,7 +795,7 @@ function updateGlacierBackground(group, elapsed, deltaTime) {
 // klimatu (matrix: bez mgły w ogóle, ostre krawędzie jak w filmie; glacier:
 // gęściej, jak zamglona, mroźna dal).
 export const THEME_BACKGROUNDS = {
-  classic: { build: buildClassicBackground, fogDensity: 0.004, update: updateClassicBackground },
+  classic: { build: buildClassicBackground, fogDensity: 0.0022, update: updateClassicBackground },
   synthwave: { build: buildSynthwaveBackground, fogDensity: 0.0035 },
   matrix: { build: buildMatrixBackground, fogDensity: 0.0, update: updateMatrixBackground },
   amber: { build: buildAmberBackground, fogDensity: 0.0035, update: updateAmberBackground },
