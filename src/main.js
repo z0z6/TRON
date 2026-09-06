@@ -38,8 +38,8 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 30, 30);
-camera.lookAt(0, 0, 0);
+camera.position.set(0, 45, 75);
+camera.lookAt(0, 8, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(initialSize.width, initialSize.height);
