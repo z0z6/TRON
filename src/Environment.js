@@ -1,7 +1,4 @@
 import * as THREE from 'three';
-// Reflector jest zostawiony w importach, ale domyślnie go wyłączamy w kodzie 
-// na rzecz wydajnościowego shadera. Jeśli bardzo chcesz odbić, odkomentuj jego użycie.
-// import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { THEME_BACKGROUNDS } from './BackgroundThemes.js';
 
 const ARENA_LENGTH = 90;
@@ -68,8 +65,8 @@ export class SynthwaveEnvironment {
     this._activeUpdate = null;
     this.arenaMesh = null;
 
-    this._buildProceduralArena(); // Zastępuje _buildFloorBase i _buildHorizonFadeMask
-    this._buildOverheadLight();
+    this._buildProceduralArena();
+    // USUNIĘTO: this._buildOverheadLight() - źródło światła zostało całkowicie usunięte
 
     this.scene.fog = new THREE.FogExp2(0x0c0420, 0.004);
     this.scene.add(this.group);
@@ -94,8 +91,6 @@ export class SynthwaveEnvironment {
         uColorGrid: { value: new THREE.Color(1.0, 0.9, 0.0) }, // Domyślny: Żółty (Preview)
         uColorBg: { value: new THREE.Color(0.05, 0.05, 0.1) }
       },
-      // Opcjonalnie: jeśli chcesz, aby pod spodem było widać Reflector, 
-      // ustaw transparent: true i opacity: 0.9. Dla maksymalnej wydajności na Androidzie zostaw false.
       transparent: false,
       fog: false // Mgła jest obsługiwana ręcznie w shaderze dla lepszej kontroli
     });
@@ -104,23 +99,6 @@ export class SynthwaveEnvironment {
     this.arenaMesh.position.y = -0.5;
     this.arenaMesh.receiveShadow = false;
     this.group.add(this.arenaMesh);
-
-    /* 
-      UWAGA: Oryginalny Reflector został usunięty/zakomentowany. 
-      Powód: 1) Shader idealnie odwzorowuje model z pliku HTML. 
-             2) Reflector jest bardzo ciężki dla GPU na Androidzie. 
-             3) Siatka w shaderze jest emisyjna (świecąca), więc odbicia są mniej widoczne.
-      Jeśli koniecznie chcesz odbić, odkomentuj import Reflector na górze i dodaj go tutaj 
-      na pozycji y = -0.6, ale przetestuj wydajność na telefonie.
-    */
-  }
-
-  _buildOverheadLight() {
-    // Białe światło, obniżone i wzmocnione dla lepszego gradientu (zgodnie z komentarzem w oryginale)
-    this.overheadLight = new THREE.PointLight(0xffffff, 3.2, 0, 1.4);
-    this.overheadLight.position.set(0, ARENA_LENGTH * 0.6, 0);
-    this.overheadLight.visible = false;
-    this.scene.add(this.overheadLight);
   }
 
   setTheme(key) {
@@ -146,8 +124,7 @@ export class SynthwaveEnvironment {
 
     // 3. Aktualizacja shadera areny pod kątem motywu
     const bounded = BOUNDED_SCENE_THEMES.has(key);
-    this.overheadLight.visible = bounded;
-    this.arenaMesh.visible = bounded; // W glacier/amber można ukryć tę siatkę, jeśli tło ma swoją własną
+    this.arenaMesh.visible = bounded;
 
     if (bounded) {
       this._updateArenaTheme(key, entry.bg);
@@ -203,7 +180,7 @@ export class SynthwaveEnvironment {
       if (obj.material) obj.material.dispose();
     });
     this.scene.remove(this.group);
-    if (this.overheadLight) this.scene.remove(this.overheadLight);
+    // USUNIĘTO: usuwanie overheadLight, ponieważ zostało całkowicie usunięte
     if (this.arenaMaterial) this.arenaMaterial.dispose();
     this.scene.fog = null;
   }
