@@ -227,9 +227,9 @@ function buildClassicBackground() {
 
   // Trzy warstwy głębi zamiast dwóch - bliska, średnia, daleka - więcej
   // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery.
-  addLayer({ count: 60, radiusMin: 85, radiusMax: 140, heightMin: 22, heightMax: 95, color: 0x4a4ab8, spires: true, buried: [220, 340] });
-  addLayer({ count: 75, radiusMin: 165, radiusMax: 270, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380] });
-  addLayer({ count: 60, radiusMin: 300, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
+  addLayer({ count: 60, radiusMin: 48, radiusMax: 120, heightMin: 22, heightMax: 95, color: 0x4a4ab8, spires: true, buried: [220, 340] });
+  addLayer({ count: 75, radiusMin: 120, radiusMax: 250, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380] });
+  addLayer({ count: 60, radiusMin: 250, radiusMax: 430, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
 
   // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
   // statyczne) - patrz updateClassicBackground(). Znacznie więcej niż
@@ -518,10 +518,10 @@ function buildMatrixBackground() {
   }
 
   // Bliższa warstwa - mniej strumieni, ale szersze, jaśniejsze i szybsze.
-  addLayer(46, 90, 160, 55, 100, 0.9, 20, 45, 5, 9);
+  addLayer(46, 48, 150, 55, 100, 0.9, 20, 45, 5, 9);
   // Dalsza warstwa - więcej, drobniejsze, wolniejsze i przygaszone (głębia,
   // paralaksa przy skręcaniu kamery).
-  addLayer(64, 170, 300, 70, 150, 0.42, 8, 20, 6, 12);
+  addLayer(64, 150, 300, 70, 150, 0.42, 8, 20, 6, 12);
 
   group.userData.matrixColumns = columns;
   return group;
