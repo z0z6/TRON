@@ -135,7 +135,8 @@ function buildWindowFacadeTexture(rand) {
     for (let c = 0; c < cols; c++) {
       if (rand() < 0.5) continue; // nie każde okno "istnieje" - nieregularna fasada
       const lit = rand() < 0.55;
-      ctx.fillStyle = lit ? 'rgba(150,225,255,0.95)' : 'rgba(40,55,95,0.6)';
+      // POPRAWKA: ciemniejsze okna (zmniejszona alpha i jasność)
+      ctx.fillStyle = lit ? 'rgba(80,180,255,0.6)' : 'rgba(40,55,95,0.4)';
       ctx.fillRect(c * cw + 1, r * ch + 1, cw - 2, ch - 2);
     }
   }
@@ -155,7 +156,7 @@ function buildClassicBackground() {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     // MeshStandardMaterial zamiast MeshBasicMaterial - reaguje na światła
     // sceny (ambient + directional + fill/rim, patrz main.js), więc każda
-    // ściana budynku dostaje inny odcień zależnie od kąta do światła (góra
+    // ściana budynku dostaje inny odcień zależnie od kątu do światła (góra
     // jaśniejsza, boki w cieniu, druga strona doświetlona chłodnym fill
     // lightem) zamiast być jednolitą, płaską plamą koloru.
     const material = new THREE.MeshStandardMaterial({
@@ -164,7 +165,7 @@ function buildClassicBackground() {
       roughness: 0.7,
       metalness: 0.2,
       emissive: color,
-      emissiveIntensity: 0.5, // było 0.15 - budynki muszą mieć realny, widoczny blask, żeby w ogóle było co gradientować do czerni; zbyt ciemna baza + mgła na dystansie 300+ dawały praktycznie czarną sylwetkę niezależnie od cieniowania
+      emissiveIntensity: 0.15, // POPRAWKA: zmniejszono z 0.5 do 0.15 (oryginalna wartość)
       fog: true
     });
     // Cieniowanie NIE zaczyna się na horyzoncie - większość budynku (część
@@ -185,7 +186,7 @@ function buildClassicBackground() {
     if (spires) {
       const sg = new THREE.CylinderGeometry(0.15, 0.25, 1, 6);
       const sm = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0.9,
+        color: 0xffffff, transparent: true, opacity: 0.5, // POPRAWKA: zmniejszono opacity z 0.9 do 0.5
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false
       });
       spireMesh = new THREE.InstancedMesh(sg, sm, count);
@@ -250,13 +251,14 @@ function buildClassicBackground() {
   const lightCount = 900;
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.95,
+    color: 0xffffff, transparent: true, opacity: 0.6, // POPRAWKA: zmniejszono opacity z 0.95 do 0.6
     blending: THREE.AdditiveBlending, depthWrite: false, fog: false, vertexColors: true
   });
   const lights = new THREE.InstancedMesh(geometry, material, lightCount);
   const dummy = new THREE.Object3D();
-  const colorA = new THREE.Color(0x00ffff).multiplyScalar(1.6);
-  const colorB = new THREE.Color(0xff0055).multiplyScalar(1.6);
+  // POPRAWKA: usunięto mnożenie przez 1.6 - kolory są teraz naturalne
+  const colorA = new THREE.Color(0x00ffff); 
+  const colorB = new THREE.Color(0xff0055);
   const isA = new Uint8Array(lightCount);
   const phases = new Float32Array(lightCount);
   for (let i = 0; i < lightCount; i++) {
@@ -264,7 +266,8 @@ function buildClassicBackground() {
     const radius = 90 + rand() * 340;
     const height = 2 + rand() * 250;
     dummy.position.set(Math.cos(angle) * radius, height - 0.55, Math.sin(angle) * radius);
-    const s = 1.2 + rand() * 3.2; // było 0.5-2.2 - za małe, żeby cokolwiek było widać z dystansu 90-430 jednostek
+    // POPRAWKA: zmniejszono rozmiar diod
+    const s = 0.8 + rand() * 1.5; // było 1.2-3.2
     dummy.scale.set(s, s * 0.35, 0.15);
     dummy.rotation.y = rand() * Math.PI;
     dummy.updateMatrix();
@@ -303,7 +306,8 @@ function updateClassicBackground(group, elapsed) {
   let cursor = group.userData.classicTwinkleCursor;
   for (let n = 0; n < batch; n++) {
     const i = (cursor + n) % total;
-    const twinkle = 0.55 + 0.45 * Math.sin(elapsed * 2.2 + phases[i]);
+    // POPRAWKA: mniejszy zakres migotania (0.3-0.7 zamiast 0.55-1.0)
+    const twinkle = 0.3 + 0.4 * Math.sin(elapsed * 2.2 + phases[i]);
     scratch.copy(isA[i] ? colorA : colorB).multiplyScalar(twinkle);
     lights.setColorAt(i, scratch);
   }
@@ -398,8 +402,9 @@ function buildSynthwaveBackground() {
 
   // Jedno, wyraźne, ale niedominujące słońce (umiarkowana opacity zamiast
   // 0.85) - z odbiciem na podłodze (patrz buildSunWithReflection wyżej).
+  // POPRAWKA: zmniejszono opacity słońca
   disposeAwareAdd(group, buildSunWithReflection(rand, {
-    core: '#fff0f8', mid: '#ff5fa8', stripes: true, radius: 60, skyY: 50, opacity: 0.55
+    core: '#fff0f8', mid: '#ff5fa8', stripes: true, radius: 60, skyY: 50, opacity: 0.35 // było 0.55
   }));
 
   // Góry - kontur (LineSegments, nie wypełnione trójkąty), żeby wyglądały
@@ -425,7 +430,12 @@ function buildSynthwaveBackground() {
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85, fog: true });
+    const material = new THREE.LineBasicMaterial({ 
+      color, 
+      transparent: true, 
+      opacity: 0.6, // POPRAWKA: zmniejszono z 0.85 do 0.6
+      fog: true 
+    });
     // Cieniowanie zaczyna się dopiero blisko dna iglic (nie od horyzontu) -
     // ta sama zasada co przy budynkach classic (patrz applyHorizonFade
     // wyżej i komentarz przy addLayer). Zakres iglic: -120 do -220.
@@ -464,8 +474,9 @@ function buildMatrixCharacterTexture(rand) {
   for (let y = 14; y < canvas.height; y += 26) {
     const ch = chars[Math.floor(rand() * chars.length)];
     const bright = rand();
-    ctx.fillStyle = bright < 0.15 ? '#eaffea' : '#3dff6e';
-    ctx.globalAlpha = 0.5 + rand() * 0.5;
+    // POPRAWKA: ciemniejsze znaki (mniej jasnych)
+    ctx.fillStyle = bright < 0.08 ? '#aaffaa' : '#2a8f3a'; // było '#eaffea' i '#3dff6e'
+    ctx.globalAlpha = 0.4 + rand() * 0.4; // było 0.5-1.0
     ctx.fillText(ch, canvas.width / 2, y);
   }
   const texture = new THREE.CanvasTexture(canvas);
@@ -533,10 +544,11 @@ function buildMatrixBackground() {
   }
 
   // Bliższa warstwa - mniej strumieni, ale szersze, jaśniejsze i szybsze.
-  addLayer(46, 300, 400, 55, 100, 0.9, 20, 45, 5, 9);
+  // POPRAWKA: zmniejszono opacity
+  addLayer(46, 300, 400, 55, 100, 0.5, 20, 45, 5, 9); // było 0.9
   // Dalsza warstwa - więcej, drobniejsze, wolniejsze i przygaszone (głębia,
   // paralaksa przy skręcaniu kamery).
-  addLayer(64, 400, 600, 70, 150, 0.42, 8, 20, 6, 12);
+  addLayer(64, 400, 600, 70, 150, 0.25, 8, 20, 6, 12); // było 0.42
 
   group.userData.matrixColumns = columns;
   return group;
@@ -577,8 +589,9 @@ function buildAmberBackground() {
   const rand = makeRand(9001);
   const group = new THREE.Group();
 
+  // POPRAWKA: zmniejszono opacity słońca
   disposeAwareAdd(group, buildSunWithReflection(rand, {
-    core: '#fff6e0', mid: '#ffb347', stripes: false, radius: 58, skyY: 52, opacity: 0.55
+    core: '#fff6e0', mid: '#ffb347', stripes: false, radius: 58, skyY: 52, opacity: 0.35 // było 0.55
   }));
 
   const shapes = [];
@@ -589,7 +602,13 @@ function buildAmberBackground() {
       ? new THREE.TorusGeometry(4 + rand() * 6, 0.4, 8, 20)
       : new THREE.ConeGeometry(4 + rand() * 5, 8 + rand() * 8, 4);
     const color = rand() < 0.5 ? 0xff6ec7 : 0xffb347;
-    const material = new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.8, fog: true });
+    const material = new THREE.MeshBasicMaterial({ 
+      color, 
+      wireframe: true, 
+      transparent: true, 
+      opacity: 0.5, // POPRAWKA: zmniejszono z 0.8 do 0.5
+      fog: true 
+    });
     const mesh = new THREE.Mesh(geometry, material);
     const angle = rand() * Math.PI * 2;
     const radius = 100 + rand() * 220;
@@ -617,7 +636,8 @@ function buildAmberBackground() {
         : new THREE.ConeGeometry((5 + rand() * 9) * scaleMul, visibleHeight, 5);
       const color = rand() < 0.5 ? 0xffb347 : 0xff8f6e;
       const material = new THREE.MeshStandardMaterial({
-        color, emissive: color, emissiveIntensity: 0.12, roughness: 0.55, metalness: 0.1, fog: true
+        color, emissive: color, emissiveIntensity: 0.08, // POPRAWKA: zmniejszono z 0.12 do 0.08
+        roughness: 0.55, metalness: 0.1, fog: true
       });
       const mesh = new THREE.Mesh(geometry, material);
 
@@ -636,7 +656,12 @@ function buildAmberBackground() {
       disposeAwareAdd(group, mesh);
 
       const edges = new THREE.EdgesGeometry(geometry);
-      const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xffe0b3, transparent: true, opacity: 0.7, fog: false });
+      const edgeMaterial = new THREE.LineBasicMaterial({ 
+        color: 0xffe0b3, 
+        transparent: true, 
+        opacity: 0.4, // POPRAWKA: zmniejszono z 0.7 do 0.4
+        fog: false 
+      });
       const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
       edgeLines.position.copy(mesh.position);
       edgeLines.rotation.copy(mesh.rotation);
@@ -663,11 +688,11 @@ function buildAmberBackground() {
     const material = new THREE.MeshStandardMaterial({
       color: rand() < 0.5 ? 0xff9ecf : 0xffcf8a,
       emissive: rand() < 0.5 ? 0xff9ecf : 0xffcf8a,
-      emissiveIntensity: 0.1,
+      emissiveIntensity: 0.06, // POPRAWKA: zmniejszono z 0.1 do 0.06
       roughness: 0.5,
       wireframe: true,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.35, // POPRAWKA: zmniejszono z 0.55 do 0.35
       fog: true
     });
     const col = new THREE.Mesh(geometry, material);
@@ -740,7 +765,12 @@ function buildGlacierBackground() {
       disposeAwareAdd(group, mesh);
 
       const edges = new THREE.EdgesGeometry(geometry);
-      const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x8fefff, transparent: true, opacity: 0.7, fog: false });
+      const edgeMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x8fefff, 
+        transparent: true, 
+        opacity: 0.4, // POPRAWKA: zmniejszono z 0.7 do 0.4
+        fog: false 
+      });
       const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
       edgeLines.position.copy(mesh.position);
       edgeLines.rotation.copy(mesh.rotation);
@@ -772,7 +802,7 @@ function buildGlacierBackground() {
   }
   snowGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const snowMaterial = new THREE.PointsMaterial({
-    color: 0xdff6ff, size: 0.35, transparent: true, opacity: 0.8, fog: false, depthWrite: false
+    color: 0xdff6ff, size: 0.35, transparent: true, opacity: 0.5, fog: false, depthWrite: false // POPRAWKA: zmniejszono opacity z 0.8 do 0.5
   });
   const snow = new THREE.Points(snowGeometry, snowMaterial);
   disposeAwareAdd(group, snow);
