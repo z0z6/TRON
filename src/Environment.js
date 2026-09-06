@@ -76,7 +76,16 @@ export class SynthwaveEnvironment {
     // Przezroczysty środek do ok. 0.35 promienia (pokrywa całą arenę
     // ±45 - patrz Grid(90,45)), dalej płynne przejście do 0.85 promienia,
     // gdzie tekstura jest już w pełni nieprzezroczysta.
-    const gradient = ctx.createRadialGradient(c, c, 512 * 0.35, c, c, 512 * 0.85);
+    // Przezroczysta TYLKO nad samą areną (promień ~48 jednostek świata -
+    // arena to Grid(90,45), połowa boku = 45), potem BARDZO ciasne przejście
+    // do pełnej nieprzezroczystości (~58 jednostek) - żadnej rozległej,
+    // mętnej strefy pośredniej. Promienie podane w PIKSELACH canvasu
+    // (512x512, środek 256) - poprzednia wersja liczyła je jako "512 *
+    // ułamek" zamiast względem promienia canvasu (256), więc zewnętrzny
+    // przystanek (512*0.85=435px) WYCHODZIŁ POZA canvas (max promień 256px)
+    // i nigdy nie osiągał realnej pełnej nieprzezroczystości - to był drugi,
+    // niezależny błąd pogłębiający tę samą ciemną, "pustą" przestrzeń.
+    const gradient = ctx.createRadialGradient(c, c, 77, c, c, 93);
     gradient.addColorStop(0, 'rgba(0,0,0,0)');
     gradient.addColorStop(1, 'rgba(255,255,255,1)'); // BIAŁY, nie czarny - kolor tekstury mnoży się przez material.color (setHorizonFadeColor), więc czarny zawsze dawałby czarny wynik niezależnie od koloru motywu - to był realny błąd dający niedopasowaną, twardą krawędź zamiast płynnego zlania się z tłem
     ctx.fillStyle = gradient;
