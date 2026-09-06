@@ -1,17 +1,12 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { THEME_BACKGROUNDS } from './BackgroundThemes.js';
-
-// Ta sama wartość co Grid(90, 45) w main.js - "długość sceny gry", używana
-// jako wysokość światła punktowego (patrz _buildOverheadLight) i jako
-// odniesienie dla zasięgu zanikania podłogi (patrz _buildHorizonFadeMask).
-const ARENA_LENGTH = 90;
+import { ArenaGround } from './ArenaGround.js';
 
 // Motywy, w których podłoga/lustro ma się WYRAŹNIE KOŃCZYĆ na granicy areny
-// (zamiast ciągnąć się jak tafla jeziora aż po horyzont) i w których tło
-// jest oświetlone punktowo z góry, z naturalnym, gradientowym zanikaniem
-// wraz z odległością. Glacier i amber CELOWO zostają przy nieskończonej
-// tafli - tam to pasuje do koncepcji (patrz komentarze w BackgroundThemes.js).
+// (zamiast ciągnąć się jak tafla jeziora aż po horyzont). Glacier i amber
+// CELOWO zostają przy nieskończonej tafli - tam to pasuje do koncepcji
+// (patrz komentarze w BackgroundThemes.js).
 const BOUNDED_SCENE_THEMES = new Set(['classic', 'synthwave', 'matrix']);
 
 /**
@@ -31,7 +26,13 @@ export class SynthwaveEnvironment {
 
     this._buildFloorBase();
     this._buildHorizonFadeMask();
-    this._buildOverheadLight();
+    // Proceduralna, "zapadająca się" podłoga (ArenaGroundShader.js) -
+    // uzupełnienie osobnych brył z BackgroundThemes.js, dająca ciągłość
+    // między areną a odległym otoczeniem. CELOWO bez żadnego dodatkowego
+    // światła (usunięte w tej wersji razem z dawnym _buildOverheadLight -
+    // to ono najpewniej odpowiadało za prześwietlenie wnętrza areny przy
+    // łączeniu z jasnymi, surowymi kolorami tego shadera).
+    this.arenaGround = new ArenaGround(scene);
 
     // Gęstość nadpisywana przez setTheme() (patrz THEME_BACKGROUNDS) - kolor
     // nadpisywany przez setFogColor() (main.js, zgodnie z theme.bg).
@@ -111,25 +112,12 @@ export class SynthwaveEnvironment {
     this.group.add(this.horizonFade);
   }
 
-  // Światło punktowe zawieszone nad środkiem sceny gry, na wysokości równej
-  // jej długości (ARENA_LENGTH) - naturalny, fizyczny spadek jasności wraz
-  // z odległością (zanikanie kwadratowe, decay) daje GRADIENTOWE, a nie
-  // ostro odcięte, przyciemnianie elementów tła im dalej/głębiej pod
-  // posadzką (patrz "zakopane" elementy w BackgroundThemes.js). Widoczne
-  // TYLKO dla BOUNDED_SCENE_THEMES - glacier/amber mają swój własny,
-  // niezależny sposób oświetlenia (patrz komentarze tam).
-  // Światło punktowe zawieszone nad środkiem sceny gry - obniżone do 0.6x
-  // długości areny (zamiast pełnej wysokości) i wzmocnione, po
-  // przetestowaniu w poglądowym modelu 3D: niżej i mocniej dawało wyraźnie
-  // czytelniejszy, gradientowy spadek jasności niż wersja zawieszona pełną
-  // wysokość wyżej. Kolor neutralny (biały) - w demie użyto czerwieni tylko
-  // żeby łatwiej było zobaczyć sam zasięg światła, nie jako docelowa barwa.
-  _buildOverheadLight() {
-    this.overheadLight = new THREE.PointLight(0xffffff, 3.2, 0, 1.4);
-    this.overheadLight.position.set(0, ARENA_LENGTH * 0.6, 0);
-    this.overheadLight.visible = false;
-    this.scene.add(this.overheadLight);
-  }
+  // Światło punktowe zawieszone nad areną zostało USUNIĘTE - okazało się
+  // odpowiadać za prześwietlenie wnętrza areny w połączeniu z jasnymi
+  // kolorami proceduralnej podłogi (ArenaGround). Zanikanie elementów tła
+  // wraz z odległością/głębokością załatwia teraz samodzielnie shader w
+  // ArenaGroundShader.js (bez żadnych obliczeń oświetlenia) oraz istniejący
+  // gradient wysokości w BackgroundThemes.js (applyHorizonFade).
 
   // Podmienia aktywne tło tematyczne. Bezpieczne do wywołania wielokrotnie
   // (np. przy każdej zmianie motywu w UI) - poprzednie tło jest w pełni
@@ -155,7 +143,7 @@ export class SynthwaveEnvironment {
 
     const bounded = BOUNDED_SCENE_THEMES.has(key);
     this.horizonFade.visible = bounded;
-    this.overheadLight.visible = bounded;
+    this.arenaGround.setTheme(key);
   }
 
   // Wywoływane co klatkę z main.js - deleguje do ewentualnego update() z
@@ -183,7 +171,7 @@ export class SynthwaveEnvironment {
       if (obj.material) obj.material.dispose();
     });
     this.scene.remove(this.group);
-    if (this.overheadLight) this.scene.remove(this.overheadLight);
+    if (this.arenaGround) this.arenaGround.dispose();
     this.scene.fog = null;
   }
 }
