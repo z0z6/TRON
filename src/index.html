@@ -601,21 +601,15 @@
             transform: translateX(-50%);
         }
 
-        /* Lewa strefa: SIEĆ u góry bez zmian (odstęp na przełącznik
-           motywu/Esc - oba top:16px, 40px wysokości). RESTART na samym
-           dole, KAMERA (przeniesiona tu z prawej górnej) tuż nad nią -
-           dokładnie ten sam wzorzec "dwa przyciski przy sobie", jaki
-           wcześniej miały WYCISZ+PAUZA po prawej. */
+        /* Lewa strefa: TYLKO SIEĆ powyżej klawisza skrętu. WYCISZ i RESTART
+           razem PONIŻEJ klawisza skrętu (dwa przyciski przy sobie). */
         #fnLobby3d { top: 76px; }
         #fnRestart3d { bottom: 16px; }
-        #fnCamera3d { bottom: calc(16px + var(--fn-btn-h) + 10px); }
+        #fnMute3d { bottom: calc(16px + var(--fn-btn-h) + 10px); }
 
-        /* Prawa strefa: po przeniesieniu KAMERY na lewo zostają tylko dwa
-           przyciski - rozdzielone góra/dół, tak samo jak SIEĆ/RESTART po
-           lewej (zamiast dawnego układu "jeden u góry + dwa stłoczone u
-           dołu"). WYCISZ zajmuje miejsce zwolnione przez KAMERĘ, PAUZA
-           zostaje tam, gdzie była. */
-        #fnMute3d { top: 16px; }
+        /* Prawa strefa: KAMERA i PAUZA w swojej pierwotnej pozycji - KAMERA
+           u góry, PAUZA na dole, bez zmian. */
+        #fnCamera3d { top: 16px; }
         #fnPause3d { bottom: 16px; }
 
         .fn-btn {
