@@ -601,17 +601,22 @@
             transform: translateX(-50%);
         }
 
-        /* Lewa strefa: SIEĆ u góry (z odstępem na przełącznik motywu/Esc -
-           oba top:16px, 40px wysokości), RESTART u dołu. */
+        /* Lewa strefa: SIEĆ u góry bez zmian (odstęp na przełącznik
+           motywu/Esc - oba top:16px, 40px wysokości). RESTART na samym
+           dole, KAMERA (przeniesiona tu z prawej górnej) tuż nad nią -
+           dokładnie ten sam wzorzec "dwa przyciski przy sobie", jaki
+           wcześniej miały WYCISZ+PAUZA po prawej. */
         #fnLobby3d { top: 76px; }
         #fnRestart3d { bottom: 16px; }
+        #fnCamera3d { bottom: calc(16px + var(--fn-btn-h) + 10px); }
 
-        /* Prawa strefa: KAMERA u góry, PAUZA na samym dole, WYCISZ tuż nad
-           nią (odstęp liczony od wysokości przycisku, żeby się nie stykały
-           przy różnych rozmiarach ekranu). */
-        #fnCamera3d { top: 16px; }
+        /* Prawa strefa: po przeniesieniu KAMERY na lewo zostają tylko dwa
+           przyciski - rozdzielone góra/dół, tak samo jak SIEĆ/RESTART po
+           lewej (zamiast dawnego układu "jeden u góry + dwa stłoczone u
+           dołu"). WYCISZ zajmuje miejsce zwolnione przez KAMERĘ, PAUZA
+           zostaje tam, gdzie była. */
+        #fnMute3d { top: 16px; }
         #fnPause3d { bottom: 16px; }
-        #fnMute3d { bottom: calc(16px + var(--fn-btn-h) + 10px); }
 
         .fn-btn {
             display: flex;
@@ -713,7 +718,7 @@
             text-shadow: 0 0 24px var(--theme-p1);
         }
     </style>
-  <script type="module" crossorigin src="/TRON/3d/assets/index-BuVYeVT-.js"></script>
+  <script type="module" crossorigin src="/TRON/3d/assets/index-CEvVN5Dq.js"></script>
 </head>
 <body>
     <div id="errorBanner"></div>
