@@ -23,17 +23,26 @@ function disposeAwareAdd(group, obj) {
   return obj;
 }
 
-// === CIENIOWANIE GRADIENTOWE WG WYSOKOŚCI ŚWIATA (poniżej horyzontu) ===
-// Wcześniejsze podejście (światło punktowe nad areną) dawało zanikanie wg
-// ODLEGŁOŚCI OD PUNKTU, nie wg WYSOKOŚCI względem horyzontu - w praktyce
-// nie dawało widocznego, spójnego gradientu, tylko wciąż ostre przejście
-// tam, gdzie geometria znikała za nieprzezroczystym Reflectorem podłogi
-// (Environment.js). To rozwiązuje problem u źródła: wstrzykuje do shadera
-// materiału (onBeforeCompile - standardowe API Three.js, bez zewnętrznych
-// zależności) mnożnik jasności liczony wprost z WSPÓŁRZĘDNEJ Y W PRZESTRZENI
-// ŚWIATA każdego fragmentu - pełna jasność przy y >= fadeStartY (horyzont,
-// czyli poziom posadzki), płynne (smoothstep - naprawdę gradientowe, nie
-// liniowe) przejście do całkowitej czerni przy y <= fadeEndY.
+// === CIENIOWANIE GRADIENTOWE OD POZIOMU ARENY W DÓŁ ===
+// Finalna wersja wypracowana w interaktywnej wizualizacji (rozmowa z
+// użytkownikiem) - stały, WSPÓLNY dla całej sceny punkt odniesienia tuż
+// NAD poziomem areny (LIGHT_HEIGHT, patrz niżej), od którego zaczyna się
+// przejście - bryła ma tam jeszcze swój domyślny kolor. Przejście trwa
+// PRZEZ FADE_RANGE jednostek w dół i kończy się NIE czernią, tylko
+// CIEMNIEJSZĄ WERSJĄ TEGO SAMEGO KOLORU (DARKEN_FACTOR) - stąd budynki nie
+// "znikają", tylko realistycznie ciemnieją, jakby to była właśnie arena
+// (a nie żadne prawdziwe światło) blokująca coś nad nimi. CELOWO żadnych
+// prawdziwych obliczeń oświetlenia/cieni (drogie na Androidzie) - cały
+// efekt to czysto kolorystyczny gradient wstrzyknięty w shader.
+const LIGHT_HEIGHT = 8;      // stały punkt odniesienia - tuż nad poziomem areny (y=0)
+const FADE_RANGE = 180;      // jak daleko w dół trwa przejście
+const DARKEN_FACTOR = 0.22;  // jak ciemna jest końcowa wersja koloru (nie czerń)
+
+// Wstrzykuje do shadera materiału (onBeforeCompile - standardowe API
+// Three.js, bez zewnętrznych zależności) mnożnik jasności liczony wprost z
+// WSPÓŁRZĘDNEJ Y W PRZESTRZENI ŚWIATA każdego fragmentu - pełna jasność
+// przy y >= LIGHT_HEIGHT, płynne (smoothstep - naprawdę gradientowe, nie
+// liniowe) przejście do DARKEN_FACTOR przy y <= LIGHT_HEIGHT - FADE_RANGE.
 //
 // Działa identycznie dla MeshStandardMaterial (budynki classic) i
 // MeshBasicMaterial/LineBasicMaterial (strumienie matrix, grzbiety
@@ -42,10 +51,11 @@ function disposeAwareAdd(group, obj) {
 // <color_fragment>), więc jeden hak obsługuje wszystkie użyte tu materiały.
 // Obsługuje też InstancedMesh (budynki) - #ifdef USE_INSTANCING uwzględnia
 // macierz KONKRETNEJ instancji, nie tylko wspólnej geometrii bazowej.
-function applyHorizonFade(material, fadeStartY, fadeEndY) {
+function applyHorizonFade(material, fadeStartY = LIGHT_HEIGHT, fadeEndY = LIGHT_HEIGHT - FADE_RANGE) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.fadeStartY = { value: fadeStartY };
     shader.uniforms.fadeEndY = { value: fadeEndY };
+    shader.uniforms.darkenFactor = { value: DARKEN_FACTOR };
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying float vWorldY;')
@@ -61,24 +71,24 @@ function applyHorizonFade(material, fadeStartY, fadeEndY) {
 
     // MeshStandardMaterial liczy poświatę emisyjną (totalEmissiveRadiance)
     // NIEZALEŻNIE od diffuseColor - samo ściemnianie diffuseColor (jak
-    // niżej) zostawiało budynki classic (emissiveIntensity: 0.15)
-    // "prześwitujące" niewygaszoną emisją nawet głęboko pod areną, przez co
-    // cały efekt był praktycznie niewidoczny. MeshBasicMaterial/
-    // LineBasicMaterial (matrix, synthwave) nie mają tej zmiennej wcale -
-    // stąd warunkowe dopisanie tylko tam, gdzie faktycznie istnieje.
+    // niżej) zostawiało budynki classic (emissiveIntensity>0) "prześwitujące"
+    // niewygaszoną emisją. MeshBasicMaterial/LineBasicMaterial (matrix,
+    // synthwave) nie mają tej zmiennej wcale - stąd warunkowe dopisanie
+    // tylko tam, gdzie faktycznie istnieje.
     const hasEmissive = shader.fragmentShader.includes('totalEmissiveRadiance');
 
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        '#include <common>\nvarying float vWorldY;\nuniform float fadeStartY;\nuniform float fadeEndY;'
+        '#include <common>\nvarying float vWorldY;\nuniform float fadeStartY;\nuniform float fadeEndY;\nuniform float darkenFactor;'
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
   float horizonFadeFactor = smoothstep(fadeEndY, fadeStartY, vWorldY);
-  diffuseColor.rgb *= horizonFadeFactor;
-  ${hasEmissive ? 'totalEmissiveRadiance *= horizonFadeFactor;' : ''}`
+  float darkenMix = mix(darkenFactor, 1.0, horizonFadeFactor);
+  diffuseColor.rgb *= darkenMix;
+  ${hasEmissive ? 'totalEmissiveRadiance *= darkenMix;' : ''}`
       );
   };
   material.needsUpdate = true;
@@ -164,19 +174,14 @@ function buildClassicBackground() {
       roughness: 0.7,
       metalness: 0.2,
       emissive: color,
-      emissiveIntensity: 0.5, // było 0.15 - budynki muszą mieć realny, widoczny blask, żeby w ogóle było co gradientować do czerni; zbyt ciemna baza + mgła na dystansie 300+ dawały praktycznie czarną sylwetkę niezależnie od cieniowania
+      emissiveIntensity: 0.5,
       fog: true
     });
-    // Cieniowanie NIE zaczyna się na horyzoncie - większość budynku (część
-    // widoczna nad areną + prawie cały zakopany fragment) zostaje w pełnym,
-    // jednolitym kolorze. Gradient do czerni pojawia się dopiero tuż PRZY
-    // dnie fundamentu (połowa głębokości zakopania tej warstwy, szerszy,
-    // dając wrażenie budynków "gubiących się w mroku" bardzo głęboko pod
-    // areną, zamiast szerokiego, widocznego przejścia od samego horyzontu.
-    const maxBuried = buried[1];
-    const fadeEndY = -maxBuried;
-    const fadeStartY = -maxBuried * 0.5;
-    applyHorizonFade(material, fadeStartY, fadeEndY);
+    // Wspólny, stały punkt odniesienia (LIGHT_HEIGHT/FADE_RANGE) - tuż nad
+    // areną budynek ma jeszcze domyślny kolor, w dół stopniowo ciemnieje do
+    // DARKEN_FACTOR (nie czerni). Ten sam próg dla wszystkich trzech warstw
+    // i dla synthwave/matrix niżej - żadnej kalibracji per-obiekt.
+    applyHorizonFade(material);
     const layer = new THREE.InstancedMesh(geometry, material, count);
     layer.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     const dummy = new THREE.Object3D();
@@ -429,7 +434,7 @@ function buildSynthwaveBackground() {
     // Cieniowanie zaczyna się dopiero blisko dna iglic (nie od horyzontu) -
     // ta sama zasada co przy budynkach classic (patrz applyHorizonFade
     // wyżej i komentarz przy addLayer). Zakres iglic: -120 do -220.
-    applyHorizonFade(material, -110, -220);
+    applyHorizonFade(material);
     return new THREE.LineSegments(geometry, material);
   }
 
@@ -503,12 +508,7 @@ function buildMatrixBackground() {
         map: texture, transparent: true, opacity,
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
       });
-      const buriedAmount = totalHeight - visibleHeight;
-      const bottomWorldY = centerY - totalHeight / 2;
-      // Cieniowanie zaczyna się blisko DNA TEGO KONKRETNEGO strumienia
-      // (znamy jego dokładną głębokość, w przeciwieństwie do InstancedMesh
-      // budynków classic, gdzie trzeba było przybliżać wg całej warstwy).
-      applyHorizonFade(material, bottomWorldY + buriedAmount * 0.5, bottomWorldY);
+      applyHorizonFade(material);
       const width = widthMin + rand() * (widthMax - widthMin);
       const geometry = new THREE.PlaneGeometry(width, totalHeight);
 
