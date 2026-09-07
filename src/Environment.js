@@ -41,7 +41,12 @@ export class SynthwaveEnvironment {
     // prostu nie budujemy dużej płaszczyzny - poza tym małym kwadratem
     // NIE MA żadnej geometrii, żadnego koloru - czysta pustka aż do brył
     // tła (patrz BackgroundThemes.js), które stoją setki jednostek dalej.
-    const geometry = new THREE.PlaneGeometry(130, 130);
+    // Lustro dokładnie w rozmiarze siatki gry (Grid(90,45) w main.js) - bez
+    // marginesu. Wcześniejsze 130x130 dawało wąski, ciemny, częściowo
+    // przezroczysty pas WOKÓŁ siatki, który nie był jej częścią i nie miał
+    // uzasadnienia - arena to teraz dokładnie sama siatka świetlna, nic
+    // więcej.
+    const geometry = new THREE.PlaneGeometry(90, 90);
     this.floorBase = new Reflector(geometry, {
       color: 0x2c2c5e,
       textureWidth: 2048,
