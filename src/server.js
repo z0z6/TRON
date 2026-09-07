@@ -4,9 +4,16 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
+
+// Dozwolone originy dla WebSocketa - w produkcji ustaw zmienną środowiskową
+// ALLOWED_ORIGIN na dokładny adres GitHub Pages (np.
+// "https://z0z6.github.io"), żeby dowolna strona w internecie nie mogła
+// łączyć się z tym serwerem. Bez tej zmiennej (np. lokalnie) zostaje '*'.
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: ALLOWED_ORIGIN,
     methods: ['GET', 'POST']
   }
 });
