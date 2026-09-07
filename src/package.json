@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "TRON Light Cycles - wersja 3D (Three.js) z multiplayerem",
   "main": "server.js",
+    "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
