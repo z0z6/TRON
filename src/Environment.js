@@ -19,6 +19,12 @@ export class SynthwaveEnvironment {
     this.themeGroup = null;
     this.currentThemeKey = null;
     this._activeUpdate = null;
+    // Gęstość dekoracyjnego tła (0-1, patrz PerformanceProfile.js) -
+    // domyślnie 1 (pełna jakość) dopóki main.js nie ustawi jej jawnie przez
+    // setQuality(). Wpływa TYLKO na motywy, które ją faktycznie odczytują
+    // (classic, matrix - patrz build(density) w BackgroundThemes.js);
+    // pozostałe motywy przyjmują ten argument i po prostu go ignorują.
+    this._density = 1;
 
     this._buildFloorBase();
 
@@ -58,6 +64,15 @@ export class SynthwaveEnvironment {
     this.group.add(this.floorBase);
   }
 
+  // Ustawia gęstość dekoracyjnego tła dla WSZYSTKICH kolejnych setTheme() -
+  // main.js woła to raz, zaraz po utworzeniu instancji, na podstawie
+  // wykrytego tieru wydajności. Nie przebudowuje aktywnego tła samo z
+  // siebie (celowo - patrz komentarz w PerformanceProfile.js o tym, że
+  // gęstość jest decyzją WYŁĄCZNIE statyczną, ustaloną przed startem gry).
+  setQuality(density) {
+    this._density = density;
+  }
+
   // Podmienia aktywne tło tematyczne. Bezpieczne do wywołania wielokrotnie
   // (np. przy każdej zmianie motywu w UI) - poprzednie tło jest w pełni
   // sprzątane (geometrie/materiały) przed zbudowaniem nowego.
@@ -73,7 +88,7 @@ export class SynthwaveEnvironment {
       });
     }
 
-    this.themeGroup = entry.build();
+    this.themeGroup = entry.build(this._density);
     this.group.add(this.themeGroup);
     this.currentThemeKey = key;
     this._activeUpdate = entry.update || null;

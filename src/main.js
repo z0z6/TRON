@@ -9,6 +9,7 @@ import { MultiplayerManager } from './MultiplayerManager.js';
 import { LobbyUI } from './LobbyUI.js';
 import { SynthwaveEnvironment } from './Environment.js';
 import { preloadLightCycleTemplate } from './LightCycleModel.js';
+import { detectPerformanceTier, getQualitySettings, createAdaptiveQualityController } from './PerformanceProfile.js';
 
 const scene = new THREE.Scene();
 
@@ -32,6 +33,13 @@ function getRenderSize() {
 
 const initialSize = getRenderSize();
 
+// Wykrywane RAZ, na starcie, przed utworzeniem renderera (antialias trzeba
+// znać już przy konstrukcji WebGLRenderer - nie da się go włączyć/wyłączyć
+// później bez utworzenia renderera od nowa). Patrz PerformanceProfile.js po
+// pełne wyjaśnienie heurystyki i tego, co dokładnie kontroluje "low" tier.
+const perfTier = detectPerformanceTier();
+const quality = getQualitySettings(perfTier);
+
 const camera = new THREE.PerspectiveCamera(
   75,
   initialSize.width / initialSize.height,
@@ -41,9 +49,9 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(0, 45, 75);
 camera.lookAt(0, 8, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' });
 renderer.setSize(initialSize.width, initialSize.height);
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(quality.pixelRatioCap);
 // Renderuje do #gameCanvasWrap (zwężonego o marginesy na sterowanie dotykowe
 // - patrz orientation-lock w index.html), a nie bezpośrednio do <body>, żeby
 // motocykl nigdy nie jeździł "pod" D-Padem/klawiszami funkcyjnymi.
@@ -54,7 +62,7 @@ renderer.setPixelRatio(window.devicePixelRatio);
 // grid.frag) daje efekt świecenia bez zmiany ani jednego materiału w grze.
 const composer = new EffectComposer(renderer);
 composer.setSize(initialSize.width, initialSize.height);
-composer.setPixelRatio(window.devicePixelRatio);
+composer.setPixelRatio(quality.pixelRatioCap);
 
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
@@ -66,6 +74,7 @@ const bloomPass = new UnrealBloomPass(
   0.45   // threshold - im wyżej, tym MNIEJ rzeczy zaczyna świecić (było 0.15)
 );
 composer.addPass(bloomPass);
+bloomPass.enabled = quality.bloom;
 
 // OutputPass dba o poprawne kodowanie kolorów/tone mapping na wyjściu -
 // bez tego bloom potrafi "wypłukać" kolory.
@@ -87,8 +96,15 @@ fillLight.position.set(-15, 10, -10);
 scene.add(fillLight);
 
 const environment = new SynthwaveEnvironment(scene);
+environment.setQuality(quality.sceneDensity);
 environment.setFogColor(hexToNum(initialTheme.bg));
 environment.setTheme(window.__tronThemeKey || 'classic');
+
+// Dynamiczny watchdog - patrz PerformanceProfile.js. Działa niezależnie od
+// perfTier powyżej: nawet na "high" tierze, jeśli rzeczywisty FPS w trakcie
+// gry jednak nie wyrabia, obniży pixelRatio/bloom w locie (jednokierunkowo,
+// bez powrotu - patrz komentarz w module).
+const adaptiveQuality = createAdaptiveQualityController({ renderer, composer, bloomPass });
 
 const grid = new Grid(90, 45); // dopasowane do rzeczywistej granicy planszy (±45, patrz Game.js/AI.js)
 grid.setColor(hexToNum(initialTheme.p1));
@@ -412,6 +428,7 @@ scene.add(grid.mesh);
   
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
+    adaptiveQuality.sample(deltaTime);
   
     const timeInSeconds = currentTime * 0.001;
     grid.updateRacerPositions(

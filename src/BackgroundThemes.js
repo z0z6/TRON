@@ -156,7 +156,12 @@ function buildWindowFacadeTexture(rand) {
   return texture;
 }
 
-function buildClassicBackground() {
+// density (0-1, domyślnie 1 = pełna jakość) skaluje przede wszystkim liczbę
+// OSOBNYCH draw calli (krawędzie budynków, szczeble) - nie liczbę diod
+// (InstancedMesh, tania niezależnie od ilości) ani liczbę samych budynków
+// (też InstancedMesh) - patrz PerformanceProfile.js po uzasadnienie, co
+// dokładnie jest kosztowne na starym sprzęcie/sterownikach.
+function buildClassicBackground(density = 1) {
   const rand = makeRand(1337);
   const group = new THREE.Group();
   const facadeTexture = buildWindowFacadeTexture(rand);
@@ -335,12 +340,17 @@ function buildClassicBackground() {
 
       // Diody danych na ścianach TEGO konkretnego budynku - jak najwięcej
       // (6-19 na budynek), dokładnie na jego bryle (patrz addBuildingDiodes
-      // powyżej), nie luźno w przestrzeni.
-      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, 6 + Math.floor(rand() * 14));
+      // powyżej), nie luźno w przestrzeni. Skalowane density TYLKO
+      // łagodnie (0.6-1.0x) - to InstancedMesh, więc nawet przy dużej
+      // liczbie nie generuje dodatkowych draw calli.
+      const diodeDensityMul = 0.6 + 0.4 * density;
+      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((6 + Math.floor(rand() * 14)) * diodeDensityMul)));
 
       // Poprzeczne szczeble światła na losowych ścianach tego budynku -
-      // patrz addBuildingRungs powyżej.
-      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, 1 + Math.floor(rand() * 3));
+      // patrz addBuildingRungs powyżej. W PEŁNI skalowane przez density -
+      // to OSOBNE obiekty Line (draw call na każdy), więc to one, nie
+      // diody, realnie odciążają słaby sprzęt.
+      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, Math.round((1 + Math.floor(rand() * 3)) * density));
 
       // Świecąca, skrząca się krawędź TEGO budynku - ta sama technika co
       // lodowe bryły w glacier (EdgesGeometry + LineSegments, opacity
@@ -355,31 +365,40 @@ function buildClassicBackground() {
       // warstwy głębi przez edgeSparkleStrength - bliżej mocniej, dalej
       // słabiej, tak jak wcześniej).
       const edgeTierRoll = rand();
-      let edgeBase, edgeStrength;
+      let edgeBase, edgeStrength, isDimTier;
       if (edgeTierRoll < 0.5) {
         edgeBase = 0.1 + rand() * 0.08;
         edgeStrength = 0.25 + rand() * 0.15;
+        isDimTier = true;
       } else if (edgeTierRoll < 0.68) {
         edgeBase = 0.9 + rand() * 0.1;
         edgeStrength = 0.75 + rand() * 0.2;
+        isDimTier = false;
       } else {
         edgeBase = 0.4 + 0.25 * edgeSparkleStrength;
         edgeStrength = 0.4 + 0.3 * edgeSparkleStrength;
+        isDimTier = false;
       }
-      const edgeColor = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
-      const edgeMaterial = new THREE.LineBasicMaterial({
-        color: edgeColor, transparent: true, opacity: edgeBase, fog: false,
-        blending: THREE.AdditiveBlending, depthWrite: false
-      });
-      const edgeLines = new THREE.LineSegments(edgeBoxGeometry, edgeMaterial);
-      edgeLines.position.set(px, centerY, pz);
-      edgeLines.rotation.y = dummy.rotation.y;
-      edgeLines.scale.set(width, totalHeight, depth);
-      disposeAwareAdd(group, edgeLines);
-      classicEdgeSparkles.push({
-        material: edgeMaterial, phase: rand() * Math.PI * 2,
-        strength: edgeStrength, base: edgeBase
-      });
+      // Krawędzie "przyciemnione" są i tak ledwo widoczne (opacity ~0.1-
+      // 0.18) - na niższej gęstości po prostu ich NIE TWORZYMY (zamiast
+      // tworzyć i tak prawie niewidoczny draw call). Jasne/normalne
+      // krawędzie zostają zawsze - to one realnie definiują wygląd sceny.
+      if (!isDimTier || rand() < density) {
+        const edgeColor = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
+        const edgeMaterial = new THREE.LineBasicMaterial({
+          color: edgeColor, transparent: true, opacity: edgeBase, fog: false,
+          blending: THREE.AdditiveBlending, depthWrite: false
+        });
+        const edgeLines = new THREE.LineSegments(edgeBoxGeometry, edgeMaterial);
+        edgeLines.position.set(px, centerY, pz);
+        edgeLines.rotation.y = dummy.rotation.y;
+        edgeLines.scale.set(width, totalHeight, depth);
+        disposeAwareAdd(group, edgeLines);
+        classicEdgeSparkles.push({
+          material: edgeMaterial, phase: rand() * Math.PI * 2,
+          strength: edgeStrength, base: edgeBase
+        });
+      }
 
       // Anteny stoją na WIDOCZNYM wierzchołku budynku (height, nie
       // totalHeight - zakopana część jest niewidoczna, więc nie ma sensu
@@ -649,7 +668,10 @@ function buildMatrixCharacterTexture(rand) {
   return texture;
 }
 
-function buildMatrixBackground() {
+// density (0-1) skaluje liczbę strumieni (osobne Mesh, więc realny koszt
+// draw calli - patrz PerformanceProfile.js) - szerokość poszczególnych
+// strumieni zostaje bez zmian, jest mniej strumieni, nie węższe.
+function buildMatrixBackground(density = 1) {
   const rand = makeRand(7331);
   const group = new THREE.Group();
   const baseTexture = buildMatrixCharacterTexture(rand);
@@ -704,15 +726,15 @@ function buildMatrixBackground() {
 
   // Bliższa warstwa - mniej strumieni, ale szersze, jaśniejsze i szybsze.
   // Więcej i szersze niż wcześniej (było 46 strumieni, szerokość 5-9).
-  addLayer(70, 300, 400, 55, 100, 0.9, 20, 45, 8, 15);
+  addLayer(Math.max(20, Math.round(70 * density)), 300, 400, 55, 100, 0.9, 20, 45, 8, 15);
   // Środkowa warstwa (NOWA) - wypełnia lukę głębi między bliską a dalszą,
   // dodatkowo zagęszczając ścianę cyfr.
-  addLayer(55, 380, 480, 60, 120, 0.65, 14, 32, 9, 16);
+  addLayer(Math.max(15, Math.round(55 * density)), 380, 480, 60, 120, 0.65, 14, 32, 9, 16);
   // Dalsza warstwa - więcej, szersze niż wcześniej (było 64 strumienie,
   // szerokość 6-12), wciąż wolniejsze i przygaszone (głębia, paralaksa przy
   // skręcaniu kamery). Zasięg promienia przesunięty do 480-650, żeby nie
   // dublować się z nową warstwą środkową powyżej.
-  addLayer(85, 480, 650, 70, 150, 0.42, 8, 20, 11, 19);
+  addLayer(Math.max(25, Math.round(85 * density)), 480, 650, 70, 150, 0.42, 8, 20, 11, 19);
 
   group.userData.matrixColumns = columns;
   return group;
