@@ -170,8 +170,19 @@ function buildClassicBackground() {
   // współdzielimy między wszystkimi LineSegments (różni je tylko transform,
   // tak jak różne instancje InstancedMesh różni tylko ich macierz).
   const edgeBoxGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-  const EDGE_COLORS = [0x33ffff, 0xff33ff, 0xffffff]; // cyjan / magenta / biel - ta sama paleta co diody
+  const EDGE_COLORS = [0x33ffff, 0xffffff, 0xffe135]; // cyjan / biel / żółty
   const classicEdgeSparkles = [];
+
+  // --- Poprzeczne "szczeble" światła NA ścianach, między pionowymi
+  // krawędziami budynku - jak szyny danych na obudowie serwerowni. Ta sama
+  // sztuczka współdzielonej geometrii co edgeBoxGeometry: jeden odcinek
+  // jednostkowy (-0.5,0,0)-(0.5,0,0), skalowany per-instancja (scale.x =
+  // długość). WAŻNE: insetFraction < 1 w addBuildingRungs celowo zostawia
+  // margines po obu końcach, żeby te krótkie linie NIE dotykały pionowych
+  // krawędzi ściany (rozdzielone, nie zlewające się w jedną całość).
+  const rungGeometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)
+  ]);
 
   // --- Diody danych - zbierane TU, przypięte wprost do ścian KONKRETNYCH
   // budynków (patrz addBuildingDiodes wołane wewnątrz addLayer poniżej), a
@@ -218,6 +229,47 @@ function buildClassicBackground() {
       const colorIndex = r < 0.42 ? 0 : (r < 0.78 ? 1 : 2); // ~42% cyjan, ~36% magenta, ~22% biel
 
       diodeRecords.push({ x: worldX, y: worldY, z: worldZ, rotY: panelRotY, s, colorIndex });
+    }
+  }
+
+  // Krótkie, poziome linie świetlne W POPRZEK ściany, między dwiema
+  // pionowymi krawędziami tego budynku - NIE dotykają ani krawędzi
+  // bocznych (insetFraction < 1 obcina długość z obu stron), ani górnej/
+  // dolnej (worldY liczony z większym marginesem niż przy diodach).
+  function addBuildingRungs(px, pz, rotY, width, depth, height, count) {
+    for (let r = 0; r < count; r++) {
+      const face = Math.floor(rand() * 4); // 0:+x 1:-x 2:+z 3:-z
+      const spanFull = face < 2 ? depth : width; // "szerokość" TEJ ściany
+      const insetFraction = 0.5 + rand() * 0.25; // 50-75% szerokości ściany - reszta to margines po bokach
+      const spanLen = spanFull * insetFraction;
+
+      let localX, localZ;
+      if (face === 0) { localX = width / 2 + WALL_EPS; localZ = 0; }
+      else if (face === 1) { localX = -width / 2 - WALL_EPS; localZ = 0; }
+      else if (face === 2) { localZ = depth / 2 + WALL_EPS; localX = 0; }
+      else { localZ = -depth / 2 - WALL_EPS; localX = 0; }
+
+      const worldX = px + Math.cos(rotY) * localX - Math.sin(rotY) * localZ;
+      const worldZ = pz + Math.sin(rotY) * localX + Math.cos(rotY) * localZ;
+      // Większy margines pionowy niż przy diodach (3, nie 1.4) - żeby
+      // szczebel wyraźnie NIE dotykał też górnej/dolnej krawędzi ściany.
+      const worldY = FLOOR_Y + 3 + rand() * Math.max(1, height - 7);
+
+      const rungRotY = rotY + (face < 2 ? Math.PI / 2 : 0);
+      const color = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
+      const material = new THREE.LineBasicMaterial({
+        color, transparent: true, opacity: 0.8, fog: false,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      });
+      const line = new THREE.Line(rungGeometry, material);
+      line.position.set(worldX, worldY, worldZ);
+      line.rotation.y = rungRotY;
+      line.scale.set(spanLen, 1, 1);
+      disposeAwareAdd(group, line);
+      classicEdgeSparkles.push({
+        material, phase: rand() * Math.PI * 2,
+        strength: 0.5 + rand() * 0.3, base: 0.75 + rand() * 0.15
+      });
     }
   }
 
@@ -286,14 +338,37 @@ function buildClassicBackground() {
       // powyżej), nie luźno w przestrzeni.
       addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, 6 + Math.floor(rand() * 14));
 
+      // Poprzeczne szczeble światła na losowych ścianach tego budynku -
+      // patrz addBuildingRungs powyżej.
+      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, 1 + Math.floor(rand() * 3));
+
       // Świecąca, skrząca się krawędź TEGO budynku - ta sama technika co
       // lodowe bryły w glacier (EdgesGeometry + LineSegments, opacity
       // animowana w update()), ale geometria WSPÓLNA (edgeBoxGeometry
       // zdefiniowana raz na górze funkcji) - tu różni budynki tylko
       // transform, identycznie jak przy InstancedMesh powyżej.
+      //
+      // TRZY POZIOMY JASNOŚCI zamiast jednego - losowany per budynek: połowa
+      // krawędzi wyraźnie PRZYCIEMNIONA (ledwo widoczna), mniejsza grupa
+      // (~18%) WYRAŹNIE ROZJAŚNIONA (mocny akcent), reszta zostaje na
+      // dotychczasowym, umiarkowanym poziomie (z lekką zależnością od
+      // warstwy głębi przez edgeSparkleStrength - bliżej mocniej, dalej
+      // słabiej, tak jak wcześniej).
+      const edgeTierRoll = rand();
+      let edgeBase, edgeStrength;
+      if (edgeTierRoll < 0.5) {
+        edgeBase = 0.1 + rand() * 0.08;
+        edgeStrength = 0.25 + rand() * 0.15;
+      } else if (edgeTierRoll < 0.68) {
+        edgeBase = 0.9 + rand() * 0.1;
+        edgeStrength = 0.75 + rand() * 0.2;
+      } else {
+        edgeBase = 0.4 + 0.25 * edgeSparkleStrength;
+        edgeStrength = 0.4 + 0.3 * edgeSparkleStrength;
+      }
       const edgeColor = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
       const edgeMaterial = new THREE.LineBasicMaterial({
-        color: edgeColor, transparent: true, opacity: 0.6, fog: false,
+        color: edgeColor, transparent: true, opacity: edgeBase, fog: false,
         blending: THREE.AdditiveBlending, depthWrite: false
       });
       const edgeLines = new THREE.LineSegments(edgeBoxGeometry, edgeMaterial);
@@ -303,7 +378,7 @@ function buildClassicBackground() {
       disposeAwareAdd(group, edgeLines);
       classicEdgeSparkles.push({
         material: edgeMaterial, phase: rand() * Math.PI * 2,
-        strength: edgeSparkleStrength, base: 0.6
+        strength: edgeStrength, base: edgeBase
       });
 
       // Anteny stoją na WIDOCZNYM wierzchołku budynku (height, nie
