@@ -161,6 +161,18 @@ function buildClassicBackground() {
   const group = new THREE.Group();
   const facadeTexture = buildWindowFacadeTexture(rand);
 
+  // --- Świecące krawędzie budynków - ten sam wzorzec co lodowe bryły w
+  // glacier / grunt w amber (EdgesGeometry + LineSegments, opacity
+  // animowana w updateClassicBackground()). RÓŻNICA: tam każda bryła miała
+  // WŁASNĄ, inną geometrię (ośmiościan/stożek), więc EdgesGeometry musiała
+  // być liczona per-obiekt. Tu WSZYSTKIE budynki to ten sam bazowy sześcian
+  // (patrz InstancedMesh niżej) - więc EdgesGeometry liczymy RAZ i
+  // współdzielimy między wszystkimi LineSegments (różni je tylko transform,
+  // tak jak różne instancje InstancedMesh różni tylko ich macierz).
+  const edgeBoxGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+  const EDGE_COLORS = [0x33ffff, 0xff33ff, 0xffffff]; // cyjan / magenta / biel - ta sama paleta co diody
+  const classicEdgeSparkles = [];
+
   // --- Diody danych - zbierane TU, przypięte wprost do ścian KONKRETNYCH
   // budynków (patrz addBuildingDiodes wołane wewnątrz addLayer poniżej), a
   // nie losowo w przestrzeni jak wcześniej. To był powód, dla którego
@@ -209,7 +221,7 @@ function buildClassicBackground() {
     }
   }
 
-  function addLayer({ count, radiusMin, radiusMax, heightMin, heightMax, color, spires, buried }) {
+  function addLayer({ count, radiusMin, radiusMax, heightMin, heightMax, color, spires, buried, edgeSparkleStrength }) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     // MeshStandardMaterial zamiast MeshBasicMaterial - reaguje na światła
     // sceny (ambient + directional + fill/rim, patrz main.js), więc każda
@@ -274,6 +286,26 @@ function buildClassicBackground() {
       // powyżej), nie luźno w przestrzeni.
       addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, 6 + Math.floor(rand() * 14));
 
+      // Świecąca, skrząca się krawędź TEGO budynku - ta sama technika co
+      // lodowe bryły w glacier (EdgesGeometry + LineSegments, opacity
+      // animowana w update()), ale geometria WSPÓLNA (edgeBoxGeometry
+      // zdefiniowana raz na górze funkcji) - tu różni budynki tylko
+      // transform, identycznie jak przy InstancedMesh powyżej.
+      const edgeColor = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
+      const edgeMaterial = new THREE.LineBasicMaterial({
+        color: edgeColor, transparent: true, opacity: 0.6, fog: false,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      });
+      const edgeLines = new THREE.LineSegments(edgeBoxGeometry, edgeMaterial);
+      edgeLines.position.set(px, centerY, pz);
+      edgeLines.rotation.y = dummy.rotation.y;
+      edgeLines.scale.set(width, totalHeight, depth);
+      disposeAwareAdd(group, edgeLines);
+      classicEdgeSparkles.push({
+        material: edgeMaterial, phase: rand() * Math.PI * 2,
+        strength: edgeSparkleStrength, base: 0.6
+      });
+
       // Anteny stoją na WIDOCZNYM wierzchołku budynku (height, nie
       // totalHeight - zakopana część jest niewidoczna, więc nie ma sensu
       // stawiać na niej anteny).
@@ -297,10 +329,12 @@ function buildClassicBackground() {
   }
 
   // Trzy warstwy głębi zamiast dwóch - bliska, średnia, daleka - więcej
-  // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery.
-  addLayer({ count: 60, radiusMin: 300, radiusMax: 380, heightMin: 22, heightMax: 95, color: 0x4a4ab8, spires: true, buried: [220, 340] });
-  addLayer({ count: 75, radiusMin: 380, radiusMax: 500, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380] });
-  addLayer({ count: 60, radiusMin: 500, radiusMax: 650, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
+  // szczegółu i wyraźniejsza paralaksa przy skręcaniu kamery. Krawędzie
+  // skrzą się mocniej bliżej kamery, słabiej w oddali - ten sam wzorzec co
+  // addIceLayer() w glacier.
+  addLayer({ count: 60, radiusMin: 300, radiusMax: 380, heightMin: 22, heightMax: 95, color: 0x4a4ab8, spires: true, buried: [220, 340], edgeSparkleStrength: 0.9 });
+  addLayer({ count: 75, radiusMin: 380, radiusMax: 500, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380], edgeSparkleStrength: 0.55 });
+  addLayer({ count: 60, radiusMin: 500, radiusMax: 650, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460], edgeSparkleStrength: 0.3 });
 
   // --- Materializacja diod zebranych w diodeRecords (patrz
   // addBuildingDiodes) w jeden InstancedMesh, MIGOCZĄCE (nie statyczne) -
@@ -337,6 +371,7 @@ function buildClassicBackground() {
   group.userData.classicDiodeColors = DIODE_COLORS;
   group.userData.classicTwinkleCursor = 0;
   group.userData.classicScratchColor = new THREE.Color();
+  group.userData.classicEdgeSparkles = classicEdgeSparkles;
 
   return group;
 }
@@ -348,7 +383,7 @@ function buildClassicBackground() {
 // sumie (batch to zawsze 10% całości).
 function updateClassicBackground(group, elapsed) {
   const { classicLights: lights, classicLightColorIndices: colorIndices, classicLightPhases: phases,
-    classicDiodeColors: diodeColors, classicScratchColor: scratch } = group.userData;
+    classicDiodeColors: diodeColors, classicScratchColor: scratch, classicEdgeSparkles: edgeSparkles } = group.userData;
   if (!lights) return;
 
   const total = phases.length;
@@ -362,6 +397,18 @@ function updateClassicBackground(group, elapsed) {
   }
   group.userData.classicTwinkleCursor = (cursor + batch) % total;
   lights.instanceColor.needsUpdate = true;
+
+  // Skrzące się krawędzie budynków - ta sama technika co iceSparkles w
+  // glacier (opacity materiału, nie kolor - stąd osobna pętla, bez
+  // batchowania: LineBasicMaterial.opacity to jedna liczba na materiał, a
+  // nie bufor per-wierzchołek jak instanceColor powyżej, więc nie ma tu
+  // kosztownego przeliczania per-instancja do zaoszczędzenia).
+  if (edgeSparkles) {
+    for (const s of edgeSparkles) {
+      const twinkle = 0.5 + 0.5 * Math.sin(elapsed * 3 + s.phase);
+      s.material.opacity = s.base * (1 - s.strength) + s.base * s.strength * twinkle;
+    }
+  }
 }
 
 // Generuje teksturę słońca (canvas, radialny gradient) - daje realne
