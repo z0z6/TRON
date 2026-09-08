@@ -161,6 +161,54 @@ function buildClassicBackground() {
   const group = new THREE.Group();
   const facadeTexture = buildWindowFacadeTexture(rand);
 
+  // --- Diody danych - zbierane TU, przypięte wprost do ścian KONKRETNYCH
+  // budynków (patrz addBuildingDiodes wołane wewnątrz addLayer poniżej), a
+  // nie losowo w przestrzeni jak wcześniej. To był powód, dla którego
+  // poprzednio prawie nie było ich widać: przy czysto losowej pozycji w
+  // promieniu/wysokości pokrywającej się z bryłami budynków większość diod
+  // lądowała WEWNĄTRZ nieprzezroczystej geometrii budynku i był zasłaniana
+  // przez test głębi (MeshStandardMaterial pisze do bufora głębi). Teraz
+  // każda dioda ma pozycję i rotację wyliczoną analitycznie z konkretnej
+  // ściany konkretnego budynku (WALL_EPS wysuwa ją odrobinę na zewnątrz od
+  // powierzchni), więc zawsze renderuje się PRZED ścianą, nigdy w niej.
+  const WALL_EPS = 0.18;
+  const diodeRecords = [];
+  const DIODE_COLORS = [
+    new THREE.Color(0x00ffff).multiplyScalar(1.9), // cyjan
+    new THREE.Color(0xff00ff).multiplyScalar(1.9), // magenta
+    new THREE.Color(0xffffff).multiplyScalar(1.6)  // biel
+  ];
+
+  function addBuildingDiodes(px, pz, rotY, width, depth, height, count) {
+    for (let d = 0; d < count; d++) {
+      const face = Math.floor(rand() * 4); // 0:+x 1:-x 2:+z 3:-z (lokalne osie budynku, przed rotacją)
+      const marginW = width * 0.42;
+      const marginD = depth * 0.42;
+      let localX, localZ;
+      if (face === 0) { localX = width / 2 + WALL_EPS; localZ = (rand() * 2 - 1) * marginD; }
+      else if (face === 1) { localX = -width / 2 - WALL_EPS; localZ = (rand() * 2 - 1) * marginD; }
+      else if (face === 2) { localZ = depth / 2 + WALL_EPS; localX = (rand() * 2 - 1) * marginW; }
+      else { localZ = -depth / 2 - WALL_EPS; localX = (rand() * 2 - 1) * marginW; }
+
+      // Obrót lokalnego punktu ściany o rotację budynku (rotY) - dokładnie
+      // ta sama macierz obrotu wokół Y, co Three.js stosuje do samej bryły.
+      const worldX = px + Math.cos(rotY) * localX - Math.sin(rotY) * localZ;
+      const worldZ = pz + Math.sin(rotY) * localX + Math.cos(rotY) * localZ;
+      // Tylko WIDOCZNA część budynku (od poziomu podłogi w górę, nie
+      // zakopana część pod areną) - `height`, nie `totalHeight`.
+      const worldY = FLOOR_Y + 1.4 + rand() * Math.max(1, height - 3);
+
+      // Panel diody leży płasko na ścianie: jego "szeroka" oś biegnie
+      // WZDŁUŻ ściany (stąd +90° na ścianach x, bez obrotu na ścianach z).
+      const panelRotY = rotY + (face < 2 ? Math.PI / 2 : 0);
+      const s = 1.1 + rand() * 3.0;
+      const r = rand();
+      const colorIndex = r < 0.42 ? 0 : (r < 0.78 ? 1 : 2); // ~42% cyjan, ~36% magenta, ~22% biel
+
+      diodeRecords.push({ x: worldX, y: worldY, z: worldZ, rotY: panelRotY, s, colorIndex });
+    }
+  }
+
   function addLayer({ count, radiusMin, radiusMax, heightMin, heightMax, color, spires, buried }) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     // MeshStandardMaterial zamiast MeshBasicMaterial - reaguje na światła
@@ -221,6 +269,11 @@ function buildClassicBackground() {
       layer.setMatrixAt(i, dummy.matrix);
       layer.setColorAt(i, baseColor.clone().multiplyScalar(0.75 + rand() * 0.5));
 
+      // Diody danych na ścianach TEGO konkretnego budynku - jak najwięcej
+      // (6-19 na budynek), dokładnie na jego bryle (patrz addBuildingDiodes
+      // powyżej), nie luźno w przestrzeni.
+      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, 6 + Math.floor(rand() * 14));
+
       // Anteny stoją na WIDOCZNYM wierzchołku budynku (height, nie
       // totalHeight - zakopana część jest niewidoczna, więc nie ma sensu
       // stawiać na niej anteny).
@@ -249,14 +302,12 @@ function buildClassicBackground() {
   addLayer({ count: 75, radiusMin: 380, radiusMax: 500, heightMin: 45, heightMax: 190, color: 0x38387a, spires: true, buried: [260, 380] });
   addLayer({ count: 60, radiusMin: 500, radiusMax: 650, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
 
-  // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
-  // statyczne) - patrz updateClassicBackground(). Jeszcze więcej niż
-  // wcześniej (były 900, teraz 2200) i rozłożone na pełnej głębi pola
-  // budynków (promień dociągnięty do 640, aż po najdalszą warstwę z
-  // addLayer() powyżej) - poprzedni zasięg 90-430 kończył się w połowie
-  // pola budynków (sięgającego do 650), więc dalsze wieżowce zostawały bez
-  // żadnych diod. ---
-  const lightCount = 2200;
+  // --- Materializacja diod zebranych w diodeRecords (patrz
+  // addBuildingDiodes) w jeden InstancedMesh, MIGOCZĄCE (nie statyczne) -
+  // patrz updateClassicBackground(). Liczba wynika z sumy diod przypiętych
+  // do wszystkich 195 budynków powyżej (zwykle ~1800-2400 - maksymalnie
+  // dużo, bez sztywnego limitu narzuconego z góry). ---
+  const lightCount = diodeRecords.length;
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.95,
@@ -264,57 +315,49 @@ function buildClassicBackground() {
   });
   const lights = new THREE.InstancedMesh(geometry, material, lightCount);
   const dummy = new THREE.Object3D();
-  const colorA = new THREE.Color(0x00ffff).multiplyScalar(1.6);
-  const colorB = new THREE.Color(0xff0055).multiplyScalar(1.6);
-  const isA = new Uint8Array(lightCount);
+  const colorIndices = new Uint8Array(lightCount);
   const phases = new Float32Array(lightCount);
   for (let i = 0; i < lightCount; i++) {
-    const angle = rand() * Math.PI * 2;
-    const radius = 120 + rand() * 520;
-    const height = 2 + rand() * 260;
-    dummy.position.set(Math.cos(angle) * radius, height - 0.55, Math.sin(angle) * radius);
-    const s = 1.2 + rand() * 3.2; // było 0.5-2.2 - za małe, żeby cokolwiek było widać z dystansu 90-430 jednostek
-    dummy.scale.set(s, s * 0.35, 0.15);
-    dummy.rotation.y = rand() * Math.PI;
+    const rec = diodeRecords[i];
+    dummy.position.set(rec.x, rec.y, rec.z);
+    dummy.scale.set(rec.s, rec.s * 0.42, 0.12);
+    dummy.rotation.y = rec.rotY;
     dummy.updateMatrix();
     lights.setMatrixAt(i, dummy.matrix);
-    const a = rand() < 0.5;
-    isA[i] = a ? 1 : 0;
+    colorIndices[i] = rec.colorIndex;
     phases[i] = rand() * Math.PI * 2;
-    lights.setColorAt(i, a ? colorA : colorB);
+    lights.setColorAt(i, DIODE_COLORS[rec.colorIndex]);
   }
   lights.instanceColor.needsUpdate = true;
   disposeAwareAdd(group, lights);
 
   group.userData.classicLights = lights;
-  group.userData.classicLightIsA = isA;
+  group.userData.classicLightColorIndices = colorIndices;
   group.userData.classicLightPhases = phases;
-  group.userData.classicColorA = colorA;
-  group.userData.classicColorB = colorB;
+  group.userData.classicDiodeColors = DIODE_COLORS;
   group.userData.classicTwinkleCursor = 0;
   group.userData.classicScratchColor = new THREE.Color();
 
   return group;
 }
 
-// Migoczące diody - zamiast przeliczać WSZYSTKIE 2200 co klatkę (kosztowne
-// i niepotrzebne - oko i tak nie nadąży ocenić każdej naraz), aktualizuje
-// tylko rotacyjną "porcję" (batch) na klatkę. Batch skalowany razem z
-// lightCount (dalej 10% na klatkę) - cały zestaw odświeża się co ~10 klatek
-// (~0.15s przy 60fps) - dalej wygląda jak ciągłe
-// skrzenie się, ale dużo taniej.
+// Migoczące diody - zamiast przeliczać WSZYSTKIE co klatkę (kosztowne i
+// niepotrzebne - oko i tak nie nadąży ocenić każdej naraz), aktualizuje
+// tylko rotacyjną "porcję" (batch) na klatkę - cały zestaw odświeża się co
+// ~10 klatek (~0.15s przy 60fps), niezależnie od tego, ile diod jest w
+// sumie (batch to zawsze 10% całości).
 function updateClassicBackground(group, elapsed) {
-  const { classicLights: lights, classicLightIsA: isA, classicLightPhases: phases,
-    classicColorA: colorA, classicColorB: colorB, classicScratchColor: scratch } = group.userData;
+  const { classicLights: lights, classicLightColorIndices: colorIndices, classicLightPhases: phases,
+    classicDiodeColors: diodeColors, classicScratchColor: scratch } = group.userData;
   if (!lights) return;
 
   const total = phases.length;
-  const batch = 220;
+  const batch = Math.max(1, Math.round(total * 0.1));
   let cursor = group.userData.classicTwinkleCursor;
   for (let n = 0; n < batch; n++) {
     const i = (cursor + n) % total;
     const twinkle = 0.55 + 0.45 * Math.sin(elapsed * 2.2 + phases[i]);
-    scratch.copy(isA[i] ? colorA : colorB).multiplyScalar(twinkle);
+    scratch.copy(diodeColors[colorIndices[i]]).multiplyScalar(twinkle);
     lights.setColorAt(i, scratch);
   }
   group.userData.classicTwinkleCursor = (cursor + batch) % total;
