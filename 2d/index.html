@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>TRON Light Cycles 2D</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -301,6 +302,115 @@
         .btn-start:hover {
             background: rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.3);
             box-shadow: 0 0 40px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.7);
+        }
+
+        .btn-mp {
+            background: rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.12);
+            border-color: var(--theme-p2);
+            color: var(--theme-p2);
+            box-shadow: 0 0 24px rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.4);
+            font-size: clamp(0.85rem, 2.6vw, 1.05rem);
+            padding: clamp(10px, 3.2vw, 13px) clamp(24px, 6vw, 36px);
+        }
+
+        .btn-mp:hover {
+            background: rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.28);
+        }
+
+        /* === LOBBY MULTIPLAYER === */
+        .mp-lobby {
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 4, 10, 0.85);
+            transition: opacity 0.25s ease;
+        }
+
+        .mp-lobby.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .mp-lobby-panel {
+            width: min(360px, 88vw);
+            background: rgba(0, 0, 20, 0.96);
+            border: 2px solid #00f3ff;
+            border-radius: 12px;
+            padding: 26px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 0 40px rgba(0, 243, 255, 0.25);
+        }
+
+        .mp-lobby-panel h2 {
+            text-align: center;
+            color: #00f3ff;
+            letter-spacing: 3px;
+            font-size: 1.3rem;
+            text-shadow: 0 0 10px #00f3ff;
+        }
+
+        .mp-status {
+            text-align: center;
+            color: #a9c9d4;
+            font-size: 0.85rem;
+            min-height: 1.4em;
+        }
+
+        .mp-action {
+            padding: 12px;
+            background: transparent;
+            border: 2px solid #00f3ff;
+            border-radius: 6px;
+            color: #00f3ff;
+            font-weight: bold;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+
+        .mp-action:hover { background: rgba(0, 243, 255, 0.15); }
+
+        .mp-start {
+            border-color: #39ff6e;
+            color: #39ff6e;
+        }
+
+        .mp-join { display: flex; gap: 8px; }
+
+        .mp-join input {
+            flex: 1;
+            min-width: 0;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #00f3ff;
+            border-radius: 6px;
+            color: #e0f7fc;
+            text-align: center;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .mp-room-code {
+            text-align: center;
+            color: #39ff6e;
+            font-weight: bold;
+            letter-spacing: 3px;
+            font-size: 1.1rem;
+        }
+
+        .mp-room-code.hidden, .mp-start.hidden { display: none; }
+
+        .mp-close {
+            background: transparent;
+            border: none;
+            color: #6fd8e8;
+            font-size: 0.8rem;
+            cursor: pointer;
+            text-decoration: underline;
         }
 
         /* === PRZEŁĄCZNIK MOTYWU KOLORYSTYCZNEGO === */
@@ -897,6 +1007,22 @@
                 <h2 id="overlay-title">SYSTEM READY</h2>
                 <p id="overlay-msg">Kliknij przycisk lub naciśnij <strong>SPACJĘ</strong></p>
                 <button id="start-btn" class="btn-start">URUCHOM CYKL</button>
+                <button id="mp-btn" type="button" class="btn-start btn-mp">MULTIPLAYER ONLINE</button>
+            </div>
+        </div>
+
+        <div id="mpLobby" class="mp-lobby hidden">
+            <div class="mp-lobby-panel">
+                <h2>TRON MULTIPLAYER</h2>
+                <div id="mpStatus" class="mp-status">Łączenie z serwerem...</div>
+                <button id="mpCreateBtn" type="button" class="mp-action">UTWÓRZ POKÓJ</button>
+                <div id="mpRoomCode" class="mp-room-code hidden"></div>
+                <div class="mp-join">
+                    <input id="mpRoomInput" type="text" maxlength="6" placeholder="KOD POKOJU">
+                    <button id="mpJoinBtn" type="button" class="mp-action">DOŁĄCZ</button>
+                </div>
+                <button id="mpStartBtn" type="button" class="mp-action mp-start hidden">START GRY</button>
+                <button id="mpCloseBtn" type="button" class="mp-close">ANULUJ</button>
             </div>
         </div>
 
@@ -1186,6 +1312,156 @@
             }
         };
 
+        // === MULTIPLAYER (współdzieli backend z wersją 3D - patrz
+        // src/server.js. Nie trzeba osobnego serwera: ten sam Socket.io
+        // relay obsługuje pokoje niezależnie od tego, który klient - 2D czy
+        // 3D - się z nim łączy, więc URL serwera przekazujemy tym samym
+        // parametrem ?server= co w wersji 3D.
+        //
+        // DLACZEGO TU DRYF POZYCJI JEST DUŻO MNIEJSZYM PROBLEMEM NIŻ W 3D:
+        // ruch jest tu dyskretny (siatka, stały krok co 80ms - patrz
+        // gameLoop), więc OBIE strony i tak liczą PEŁNĄ symulację (obu
+        // graczy, nie tylko swojego) lokalnie i deterministycznie z tego
+        // samego stanu startowego. Jedyne, co faktycznie trzeba przesyłać
+        // siecią, to zdarzenia zmiany kierunku przeciwnika - nie ma tu
+        // analogii do ciągłej pozycji z RemotePlayer.js (3D), którą trzeba
+        // interpolować. Niewielkie opóźnienie sieciowe może TYLKO przesunąć
+        // moment zmiany kierunku o pojedynczy krok siatki, nie pozycję.
+        //
+        // ŚWIADOME OGRANICZENIE v1: power-upy są WYŁĄCZONE w multiplayer
+        // (patrz `if (!isMultiplayer)` w update()). Ich spawn jest czysto
+        // losowy (Math.random(), niezsynchronizowany) - w single-playerze
+        // nieistotne (AI ich nie widzi), ale przy dwóch prawdziwych
+        // graczach każda strona zobaczyłaby je w innych miejscach. Poprawka
+        // wymagałaby, żeby host rozgłaszał spawn/zbiór przez kanał
+        // 'game-state-update' (server.js go już obsługuje) - do zrobienia
+        // w kolejnej iteracji, nie teraz.
+        let isMultiplayer = false;
+        let mpSocket = null;
+        let mpRoomId = null;
+        let mpIsHost = false;
+        let mpConnected = false;
+
+        // W single-playerze lokalny gracz to zawsze p1 (bez zmian
+        // względem wcześniej). W multiplayer host gra jako p1, gość jako p2
+        // - to samo mapowanie ról co MultiplayerManager.isHost w wersji 3D.
+        function localPlayer() {
+            if (!isMultiplayer) return p1;
+            return mpIsHost ? p1 : p2;
+        }
+        function remotePlayer() {
+            return mpIsHost ? p2 : p1;
+        }
+
+        const mpUrlParams = new URLSearchParams(window.location.search);
+        const MP_SERVER_URL = mpUrlParams.get('server') || 'http://localhost:3000';
+
+        const mpLobbyEl = document.getElementById('mpLobby');
+        const mpStatusEl = document.getElementById('mpStatus');
+        const mpCreateBtn = document.getElementById('mpCreateBtn');
+        const mpJoinBtn = document.getElementById('mpJoinBtn');
+        const mpRoomInput = document.getElementById('mpRoomInput');
+        const mpRoomCodeEl = document.getElementById('mpRoomCode');
+        const mpStartBtn = document.getElementById('mpStartBtn');
+        const mpCloseBtn = document.getElementById('mpCloseBtn');
+        const mpBtn = document.getElementById('mp-btn');
+
+        const MP_ACTION_TO_DELTA = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+        const MP_DELTA_TO_ACTION = [
+            [[0, -1], 'up'], [[0, 1], 'down'], [[-1, 0], 'left'], [[1, 0], 'right']
+        ];
+
+        function mpConnect() {
+            if (mpSocket) return;
+            mpStatusEl.textContent = 'Łączenie z serwerem...';
+            mpSocket = io(MP_SERVER_URL);
+
+            mpSocket.on('connect', () => {
+                mpConnected = true;
+                mpStatusEl.textContent = 'Połączono. Utwórz pokój lub dołącz do istniejącego.';
+            });
+            mpSocket.on('connect_error', (err) => {
+                mpConnected = false;
+                mpStatusEl.textContent = 'Brak połączenia z serwerem (' + (err && err.message ? err.message : 'sprawdź adres ?server=') + ').';
+            });
+            mpSocket.on('disconnect', () => {
+                mpConnected = false;
+                mpStatusEl.textContent = 'Rozłączono z serwerem.';
+            });
+            mpSocket.on('player-joined', () => {
+                mpStatusEl.textContent = 'Przeciwnik dołączył. Możesz zaczynać!';
+                mpStartBtn.classList.remove('hidden');
+            });
+            mpSocket.on('player-left', () => {
+                mpStatusEl.textContent = 'Przeciwnik opuścił pokój.';
+                mpStartBtn.classList.add('hidden');
+                if (isMultiplayer && isRunning) {
+                    // Przeciwnik zniknął w trakcie rundy - kończymy ją od razu,
+                    // zamiast czekać, aż lokalny gracz sam się zabije albo
+                    // dobije do końca "w pustce".
+                    isRunning = false;
+                    clearInterval(gameLoop);
+                    AUDIO.stopEngine();
+                    overlayTitle.textContent = 'PRZECIWNIK ROZŁĄCZONY';
+                    overlayMsg.textContent = 'Wróć do menu multiplayer, żeby zagrać ponownie.';
+                    overlay.classList.remove('hidden');
+                }
+            });
+            mpSocket.on('game-start', () => {
+                mpLobbyEl.classList.add('hidden');
+                isMultiplayer = true;
+                scores = { p1: 0, p2: 0 };
+                p1ScoreEl.textContent = '0';
+                p2ScoreEl.textContent = '0';
+                startRound();
+            });
+            mpSocket.on('player-input', (data) => {
+                if (!data || !data.action) return;
+                const d = MP_ACTION_TO_DELTA[data.action];
+                if (!d) return;
+                trySetPlayerDirection(remotePlayer(), d[0], d[1]);
+            });
+        }
+
+        function mpSendInput(action) {
+            if (!isMultiplayer || !mpSocket || !mpRoomId) return;
+            mpSocket.emit('player-input', { roomId: mpRoomId, action });
+        }
+
+        mpBtn.addEventListener('click', () => {
+            mpLobbyEl.classList.remove('hidden');
+            mpConnect();
+        });
+        mpCloseBtn.addEventListener('click', () => {
+            mpLobbyEl.classList.add('hidden');
+        });
+        mpCreateBtn.addEventListener('click', () => {
+            if (!mpConnected) return;
+            mpSocket.emit('create-room', {}, (res) => {
+                if (!res || !res.success) { mpStatusEl.textContent = 'Nie udało się utworzyć pokoju.'; return; }
+                mpRoomId = res.roomId;
+                mpIsHost = true;
+                mpRoomCodeEl.textContent = 'KOD POKOJU: ' + mpRoomId;
+                mpRoomCodeEl.classList.remove('hidden');
+                mpStatusEl.textContent = 'Czekam na przeciwnika...';
+            });
+        });
+        mpJoinBtn.addEventListener('click', () => {
+            if (!mpConnected) return;
+            const code = mpRoomInput.value.trim().toUpperCase();
+            if (!code) return;
+            mpSocket.emit('join-room', { roomId: code }, (res) => {
+                if (!res || !res.success) { mpStatusEl.textContent = 'Błąd: ' + (res && res.error ? res.error : 'nie udało się dołączyć'); return; }
+                mpRoomId = code;
+                mpIsHost = false;
+                mpStatusEl.textContent = 'Dołączono. Czekam, aż host rozpocznie grę...';
+            });
+        });
+        mpStartBtn.addEventListener('click', () => {
+            if (!mpIsHost || !mpSocket || !mpRoomId) return;
+            mpSocket.emit('start-game', { roomId: mpRoomId });
+        });
+
         let p1, p2, isRunning, isPaused, scores, gameLoop;
         // --- Efekty wizualne (niezależne od stałego kroku logiki 80ms -
         // patrz renderLoop() na dole pliku, który je aktualizuje i rysuje
@@ -1239,12 +1515,19 @@
             // Efekt: AI regularnie "na ślepo" wjeżdżało drugim polem w
             // ścianę lub własny ślad. Wywołanie tu, raz na każdy fizyczny
             // ruch, usuwa tę lukę całkowicie.
-            aiMove();
+            // W multiplayer nie ma AI - kierunek p2 (albo p1, jeśli lokalny
+            // gracz jest gościem) ustawiają wyłącznie zdarzenia sieciowe
+            // 'player-input' (patrz mpConnect()), więc aiMove() całkowicie
+            // pomijamy, żeby nie nadpisywało kierunku drugiego gracza.
+            if (!isMultiplayer) aiMove();
 
             const p1Dead = movePlayerStep(p1, p2);
             const p2Dead = movePlayerStep(p2, p1);
 
-            updatePowerUps();
+            // Power-upy wyłączone w multiplayer - patrz komentarz przy
+            // deklaracji isMultiplayer (świadome ograniczenie v1, ich spawn
+            // jest niezsynchronizowanym losowaniem).
+            if (!isMultiplayer) updatePowerUps();
             updatePowerUpHud();
 
             // Wysokość dźwięku silnika - 1, gdy aktywny power-up prędkości
@@ -1348,34 +1631,49 @@
         // PRZEGRANA" liczone jest z jego perspektywy.
         function showGameOverOverlay(p1Crashed, p2Crashed) {
             const draw = p1Crashed && p2Crashed;
-            const won = p2Crashed && !p1Crashed;
+            // Perspektywa lokalnego gracza, nie zawsze p1 - w multiplayer
+            // gość gra jako p2, więc "wygrana" musi patrzeć na to, kto
+            // faktycznie siedzi przy tej klawiaturze, nie na sztywną rolę p1.
+            const localCrashed = isMultiplayer && localPlayer() === p2 ? p2Crashed : p1Crashed;
+            const remoteCrashed = isMultiplayer && localPlayer() === p2 ? p1Crashed : p2Crashed;
+            const won = remoteCrashed && !localCrashed;
             const roundDuration = (performance.now() - roundStartTime) / 1000;
 
             gameOverTitleEl.textContent = draw ? 'REMIS' : (won ? 'WYGRANA' : 'PRZEGRANA');
             gameOverTitleEl.className = draw ? '' : (won ? 'won' : 'lost');
-            gameOverScoreEl.textContent = `${scores.p1} : ${scores.p2}`;
+            gameOverScoreEl.textContent = isMultiplayer && localPlayer() === p2
+                ? `${scores.p2} : ${scores.p1}`
+                : `${scores.p1} : ${scores.p2}`;
 
-            records.gamesPlayed++;
-            if (won) {
-                currentStreak++;
-                records.p1Wins++;
-            } else if (!draw) {
-                currentStreak = 0;
-            }
+            // Rekordy (localStorage) mają sens tylko dla single-playera
+            // (gracz vs AI) - w multiplayer je pomijamy, żeby wynik przeciwko
+            // drugiemu człowiekowi nie mieszał się w tej samej statystyce
+            // co "wygrane z AI".
             let isRecord = false;
-            if (roundDuration > records.longestRound) { records.longestRound = roundDuration; isRecord = true; }
-            if (currentStreak > records.bestStreak) { records.bestStreak = currentStreak; isRecord = true; }
-            saveRecords();
+            if (!isMultiplayer) {
+                records.gamesPlayed++;
+                if (won) {
+                    currentStreak++;
+                    records.p1Wins++;
+                } else if (!draw) {
+                    currentStreak = 0;
+                }
+                if (roundDuration > records.longestRound) { records.longestRound = roundDuration; isRecord = true; }
+                if (currentStreak > records.bestStreak) { records.bestStreak = currentStreak; isRecord = true; }
+                saveRecords();
+            }
 
             gameOverRecordBadgeEl.classList.toggle('show', isRecord);
 
             gameOverStatsGridEl.innerHTML = '';
-            const rows = [
-                ['Czas rundy', `${roundDuration.toFixed(1)}s`],
-                ['Power-upy', powerUpsCollectedThisRound],
-                ['Passa zwycięstw', currentStreak],
-                ['Rekord passy', records.bestStreak]
-            ];
+            const rows = isMultiplayer
+                ? [['Czas rundy', `${roundDuration.toFixed(1)}s`]]
+                : [
+                    ['Czas rundy', `${roundDuration.toFixed(1)}s`],
+                    ['Power-upy', powerUpsCollectedThisRound],
+                    ['Passa zwycięstw', currentStreak],
+                    ['Rekord passy', records.bestStreak]
+                ];
             for (const [label, value] of rows) {
                 const l = document.createElement('div');
                 l.className = 'label';
@@ -1387,8 +1685,9 @@
                 gameOverStatsGridEl.appendChild(v);
             }
 
-            gameOverLifetimeEl.textContent =
-                `Rekord rundy: ${records.longestRound.toFixed(1)}s · Rozegranych: ${records.gamesPlayed} · Wygranych P1: ${records.p1Wins}`;
+            gameOverLifetimeEl.textContent = isMultiplayer
+                ? '' // statystyki lifetime dotyczą tylko single-playera (patrz komentarz wyżej)
+                : `Rekord rundy: ${records.longestRound.toFixed(1)}s · Rozegranych: ${records.gamesPlayed} · Wygranych P1: ${records.p1Wins}`;
 
             gameOverCountdownEl.textContent = 'Kolejna runda zacznie się automatycznie za chwilę...';
             gameOverOverlayEl.classList.add('show');
@@ -1747,6 +2046,15 @@
             player.dx = dx;
             player.dy = dy;
             AUDIO.playGearShift(player === p1 ? 'p1' : 'p2');
+
+            // Skręt lokalnego gracza trzeba przekazać przeciwnikowi przez
+            // sieć - skręty przeciwnika przychodzą z powrotem przez
+            // 'player-input' (patrz mpConnect() powyżej) i trafiają tu z
+            // player === remotePlayer(), więc ten warunek nie odbija echa.
+            if (isMultiplayer && player === localPlayer()) {
+                const found = MP_DELTA_TO_ACTION.find(([d]) => d[0] === dx && d[1] === dy);
+                if (found) mpSendInput(found[1]);
+            }
         }
 
         // === POPRAWIONE AI - unika kolizji ===
@@ -1882,6 +2190,9 @@
             if (isRunning && !isPaused) {
                 if (!confirm('Opuścić grę i wrócić do menu?')) return;
             }
+            if (mpSocket && mpRoomId) {
+                mpSocket.emit('leave-room', { roomId: mpRoomId });
+            }
             window.location.href = '../index.html';
         }
         document.getElementById('escBtn').addEventListener('click', exitToMenu);
@@ -1895,19 +2206,28 @@
 
             if (e.code === 'Space') {
                 e.preventDefault();
-                if (!isRunning) startRound();
-                else {
-                    isPaused = !isPaused;
-                    overlay.classList.toggle('hidden', !isPaused);
-                    if (isPaused) {
-                        overlayTitle.textContent = "PAUZA";
-                        startBtn.textContent = "WZNOWIENIE";
-                    }
+                if (!isRunning) { if (!isMultiplayer) startRound(); return; }
+                // Pauza zatrzymuje update() lokalnie, ale w multiplayer druga
+                // strona dalej symuluje rundę - włączenie pauzy tylko u
+                // jednego gracza natychmiast rozjechałoby stan gry. Ten sam
+                // kompromis co blokada 'R' poniżej: nie ma tu jeszcze
+                // sieciowej synchronizacji pauzy, więc w multiplayer po
+                // prostu jej nie ma.
+                if (isMultiplayer) return;
+                isPaused = !isPaused;
+                overlay.classList.toggle('hidden', !isPaused);
+                if (isPaused) {
+                    overlayTitle.textContent = "PAUZA";
+                    startBtn.textContent = "WZNOWIENIE";
                 }
                 return;
             }
 
             if (e.code === 'KeyR') {
+                // Restart nie jest zsynchronizowany przez sieć (tak jak w
+                // wersji 3D - patrz src/main.js) - w multiplayer blokujemy,
+                // żeby jeden gracz nie zresetował rundy pod drugim.
+                if (isMultiplayer) return;
                 scores = { p1: 0, p2: 0 };
                 p1ScoreEl.textContent = '0';
                 p2ScoreEl.textContent = '0';
@@ -1917,10 +2237,10 @@
 
             if (!isRunning || isPaused) return;
 
-            if (e.code === 'ArrowUp') trySetPlayerDirection(p1, 0, -1);
-            if (e.code === 'ArrowDown') trySetPlayerDirection(p1, 0, 1);
-            if (e.code === 'ArrowLeft') trySetPlayerDirection(p1, -1, 0);
-            if (e.code === 'ArrowRight') trySetPlayerDirection(p1, 1, 0);
+            if (e.code === 'ArrowUp') trySetPlayerDirection(localPlayer(), 0, -1);
+            if (e.code === 'ArrowDown') trySetPlayerDirection(localPlayer(), 0, 1);
+            if (e.code === 'ArrowLeft') trySetPlayerDirection(localPlayer(), -1, 0);
+            if (e.code === 'ArrowRight') trySetPlayerDirection(localPlayer(), 1, 0);
         });
 
         document.querySelectorAll('.dpad-btn').forEach((btn) => {
@@ -1930,7 +2250,7 @@
             const press = (e) => {
                 e.preventDefault();
                 btn.classList.add('pressed');
-                if (isRunning && !isPaused) trySetPlayerDirection(p1, dx, dy);
+                if (isRunning && !isPaused) trySetPlayerDirection(localPlayer(), dx, dy);
             };
             const release = (e) => {
                 e.preventDefault();
@@ -1944,6 +2264,7 @@
 
         document.getElementById('fnPause').addEventListener('touchstart', (e) => {
             e.preventDefault();
+            if (isMultiplayer) return; // patrz komentarz przy obsłudze Space
             if (isRunning) {
                 isPaused = !isPaused;
                 overlay.classList.toggle('hidden', !isPaused);
@@ -1952,6 +2273,7 @@
 
         document.getElementById('fnRestart').addEventListener('touchstart', (e) => {
             e.preventDefault();
+            if (isMultiplayer) return; // patrz komentarz przy obsłudze KeyR
             scores = { p1: 0, p2: 0 };
             p1ScoreEl.textContent = '0';
             p2ScoreEl.textContent = '0';
@@ -1959,8 +2281,8 @@
         }, { passive: false });
 
         startBtn.addEventListener('click', () => {
-            if (!isRunning) startRound();
-            else if (isPaused) {
+            if (!isRunning) { if (!isMultiplayer) startRound(); return; }
+            if (isPaused && !isMultiplayer) {
                 isPaused = false;
                 overlay.classList.add('hidden');
             }
