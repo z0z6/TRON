@@ -250,9 +250,13 @@ function buildClassicBackground() {
   addLayer({ count: 60, radiusMin: 500, radiusMax: 650, heightMin: 70, heightMax: 260, color: 0x28285a, buried: [320, 460] });
 
   // --- Diody danych - drobne, świecące kreski na fasadach, MIGOCZĄCE (nie
-  // statyczne) - patrz updateClassicBackground(). Znacznie więcej niż
-  // wcześniej (były 420, teraz 900) dla gęstszego, bardziej "żywego" pola. ---
-  const lightCount = 900;
+  // statyczne) - patrz updateClassicBackground(). Jeszcze więcej niż
+  // wcześniej (były 900, teraz 2200) i rozłożone na pełnej głębi pola
+  // budynków (promień dociągnięty do 640, aż po najdalszą warstwę z
+  // addLayer() powyżej) - poprzedni zasięg 90-430 kończył się w połowie
+  // pola budynków (sięgającego do 650), więc dalsze wieżowce zostawały bez
+  // żadnych diod. ---
+  const lightCount = 2200;
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshBasicMaterial({
     color: 0xffffff, transparent: true, opacity: 0.95,
@@ -266,8 +270,8 @@ function buildClassicBackground() {
   const phases = new Float32Array(lightCount);
   for (let i = 0; i < lightCount; i++) {
     const angle = rand() * Math.PI * 2;
-    const radius = 90 + rand() * 340;
-    const height = 2 + rand() * 250;
+    const radius = 120 + rand() * 520;
+    const height = 2 + rand() * 260;
     dummy.position.set(Math.cos(angle) * radius, height - 0.55, Math.sin(angle) * radius);
     const s = 1.2 + rand() * 3.2; // było 0.5-2.2 - za małe, żeby cokolwiek było widać z dystansu 90-430 jednostek
     dummy.scale.set(s, s * 0.35, 0.15);
@@ -293,10 +297,11 @@ function buildClassicBackground() {
   return group;
 }
 
-// Migoczące diody - zamiast przeliczać WSZYSTKIE 900 co klatkę (kosztowne
+// Migoczące diody - zamiast przeliczać WSZYSTKIE 2200 co klatkę (kosztowne
 // i niepotrzebne - oko i tak nie nadąży ocenić każdej naraz), aktualizuje
-// tylko rotacyjną "porcję" (batch) na klatkę. Przy 90/klatkę cały zestaw
-// odświeża się co ~10 klatek (~0.15s przy 60fps) - dalej wygląda jak ciągłe
+// tylko rotacyjną "porcję" (batch) na klatkę. Batch skalowany razem z
+// lightCount (dalej 10% na klatkę) - cały zestaw odświeża się co ~10 klatek
+// (~0.15s przy 60fps) - dalej wygląda jak ciągłe
 // skrzenie się, ale dużo taniej.
 function updateClassicBackground(group, elapsed) {
   const { classicLights: lights, classicLightIsA: isA, classicLightPhases: phases,
@@ -304,7 +309,7 @@ function updateClassicBackground(group, elapsed) {
   if (!lights) return;
 
   const total = phases.length;
-  const batch = 90;
+  const batch = 220;
   let cursor = group.userData.classicTwinkleCursor;
   for (let n = 0; n < batch; n++) {
     const i = (cursor + n) % total;
@@ -533,10 +538,16 @@ function buildMatrixBackground() {
   }
 
   // Bliższa warstwa - mniej strumieni, ale szersze, jaśniejsze i szybsze.
-  addLayer(46, 300, 400, 55, 100, 0.9, 20, 45, 5, 9);
-  // Dalsza warstwa - więcej, drobniejsze, wolniejsze i przygaszone (głębia,
-  // paralaksa przy skręcaniu kamery).
-  addLayer(64, 400, 600, 70, 150, 0.42, 8, 20, 6, 12);
+  // Więcej i szersze niż wcześniej (było 46 strumieni, szerokość 5-9).
+  addLayer(70, 300, 400, 55, 100, 0.9, 20, 45, 8, 15);
+  // Środkowa warstwa (NOWA) - wypełnia lukę głębi między bliską a dalszą,
+  // dodatkowo zagęszczając ścianę cyfr.
+  addLayer(55, 380, 480, 60, 120, 0.65, 14, 32, 9, 16);
+  // Dalsza warstwa - więcej, szersze niż wcześniej (było 64 strumienie,
+  // szerokość 6-12), wciąż wolniejsze i przygaszone (głębia, paralaksa przy
+  // skręcaniu kamery). Zasięg promienia przesunięty do 480-650, żeby nie
+  // dublować się z nową warstwą środkową powyżej.
+  addLayer(85, 480, 650, 70, 150, 0.42, 8, 20, 11, 19);
 
   group.userData.matrixColumns = columns;
   return group;
