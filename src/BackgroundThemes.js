@@ -222,14 +222,19 @@ function buildClassicBackground(density = 1) {
       // ta sama macierz obrotu wokół Y, co Three.js stosuje do samej bryły.
       const worldX = px + Math.cos(rotY) * localX - Math.sin(rotY) * localZ;
       const worldZ = pz + Math.sin(rotY) * localX + Math.cos(rotY) * localZ;
-      // Tylko WIDOCZNA część budynku (od poziomu podłogi w górę, nie
-      // zakopana część pod areną) - `height`, nie `totalHeight`. Rozkład
-      // CELOWO nierównomierny - wykładnik <1 na rand() spycha większość
-      // wylosowanych wartości w górę zakresu, więc diody gęstnieją w
-      // górnej partii ściany (jak światła w wyższych piętrach wieżowca),
-      // zamiast rozkładać się równo po całej wysokości.
-      const heightFrac = Math.pow(rand(), 0.5);
-      const worldY = FLOOR_Y + 1.4 + heightFrac * Math.max(1, height - 3);
+      // Zakres pionowy diody: zaczyna się NIECO PONIŻEJ poziomu areny
+      // (lowY=-2, arena to y=0) - wcześniej diody startowały dopiero nad
+      // areną (FLOOR_Y+1.4), przez co dolna partia budynku była całkiem
+      // pusta. Rozkład dalej CELOWO nierównomierny - wykładnik <1 na
+      // rand() spycha większość wylosowanych wartości w górę zakresu
+      // (jeszcze mocniej niż wcześniej: 0.4, nie 0.5), więc diody gęstnieją
+      // przede wszystkim w górnej partii ściany (jak światła w wyższych
+      // piętrach wieżowca), rzednąc w dół, aż do niemal zera tuż nad tym
+      // dolnym limitem.
+      const lowY = -2;
+      const topY = FLOOR_Y + height;
+      const heightFrac = Math.pow(rand(), 0.4);
+      const worldY = lowY + heightFrac * (topY - lowY);
 
       // Panel diody leży płasko na ścianie: jego "szeroka" oś biegnie
       // WZDŁUŻ ściany (stąd +90° na ścianach x, bez obrotu na ścianach z).
@@ -261,9 +266,14 @@ function buildClassicBackground(density = 1) {
 
       const worldX = px + Math.cos(rotY) * localX - Math.sin(rotY) * localZ;
       const worldZ = pz + Math.sin(rotY) * localX + Math.cos(rotY) * localZ;
-      // Większy margines pionowy niż przy diodach (3, nie 1.4) - żeby
-      // szczebel wyraźnie NIE dotykał też górnej/dolnej krawędzi ściany.
-      const worldY = FLOOR_Y + 3 + rand() * Math.max(1, height - 7);
+      // Ta sama zasada co przy diodach (patrz addBuildingDiodes) - zakres
+      // zaczyna się nieco poniżej poziomu areny (lowY=-2) i jest mocno
+      // przechylony ku górze (wykładnik 0.4), więc szczeble też gęstnieją
+      // najmocniej tam, gdzie już jest najwięcej diod, i rzednąc w dół.
+      const lowY = -2;
+      const topY = FLOOR_Y + height;
+      const heightFrac = Math.pow(rand(), 0.4);
+      const worldY = lowY + heightFrac * (topY - lowY);
 
       const rungRotY = rotY + (face < 2 ? Math.PI / 2 : 0);
       const color = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
@@ -348,19 +358,17 @@ function buildClassicBackground(density = 1) {
       // powyżej), nie luźno w przestrzeni. Skalowane density TYLKO
       // łagodnie (0.6-1.0x) - to InstancedMesh, więc nawet przy dużej
       // liczbie nie generuje dodatkowych draw calli.
-      // Zdecydowanie więcej diod niż wcześniej (14-38 zamiast 6-19 na
-      // budynek) - krawędzie kontur świeci teraz tylko na połowie brył
-      // (patrz hasEdge niżej), więc to punkty na powierzchni, nie kontur,
-      // mają nieść większość detalu tła.
+      // Jeszcze więcej diod niż poprzednio (22-56 zamiast 14-38 na
+      // budynek) - w połączeniu z mocniejszym wykładnikiem rozkładu (0.4)
+      // większość z nich ląduje w górnej partii, gdzie już było ich najwięcej.
       const diodeDensityMul = 0.6 + 0.4 * density;
-      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((14 + Math.floor(rand() * 24)) * diodeDensityMul)));
+      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((22 + Math.floor(rand() * 34)) * diodeDensityMul)));
 
-      // Poprzeczne szczeble światła na losowych ścianach tego budynku -
-      // patrz addBuildingRungs powyżej. Więcej niż wcześniej (3-8 zamiast
-      // 1-3). W PEŁNI skalowane przez density - to OSOBNE obiekty Line
-      // (draw call na każdy), więc to one, nie diody, realnie odciążają
-      // słaby sprzęt.
-      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, Math.round((3 + Math.floor(rand() * 5)) * density));
+      // Więcej szczebli niż poprzednio (5-12 zamiast 3-8) - patrz
+      // addBuildingRungs powyżej. W PEŁNI skalowane przez density - to
+      // OSOBNE obiekty Line (draw call na każdy), więc to one, nie diody,
+      // realnie odciążają słaby sprzęt.
+      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, Math.round((5 + Math.floor(rand() * 7)) * density));
 
       // Świecąca, skrząca się krawędź TEGO budynku - ta sama technika co
       // lodowe bryły w glacier (EdgesGeometry + LineSegments, opacity
@@ -616,6 +624,13 @@ function buildStarfield(rand, count, color, radiusMin, radiusMax, heightMin, hei
 function buildSynthwaveBackground() {
   const rand = makeRand(4242);
   const group = new THREE.Group();
+  // Migot krawędzi grzbietów - ta sama technika co classicEdgeSparkles w
+  // motywie classic (opacity materiału animowana sinusoidalnie w
+  // updateSynthwaveBackground niżej), tylko że tu JEDEN materiał = CAŁY
+  // grzbiet (dziesiątki segmentów w jednym LineSegments), więc migają razem,
+  // a nie pojedynczo - to wystarcza, bo grzbietów jest teraz kilka, każdy z
+  // WŁASNĄ fazą, więc i tak nie migają w unisono.
+  const ridgeSparkles = [];
 
   // Jedno, wyraźne, ale niedominujące słońce (umiarkowana opacity zamiast
   // 0.85) - z odbiciem na podłodze (patrz buildSunWithReflection wyżej).
@@ -647,21 +662,41 @@ function buildSynthwaveBackground() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85, fog: true });
-    // Cieniowanie zaczyna się dopiero blisko dna iglic (nie od horyzontu) -
-    // ta sama zasada co przy budynkach classic (patrz applyHorizonFade
-    // wyżej i komentarz przy addLayer). Zakres iglic: -120 do -220.
-    applyHorizonFade(material);
+    // Ta sama technika co przy krawędziach budynków w classic - gradient
+    // liczony od szczytu grzbietu w dół, ale z darkenFactor=0 (nie
+    // DARKEN_FACTOR=0.22): dno iglic ma CAŁKOWICIE zniknąć, nie tylko
+    // przygasnąć, tak żeby góry realnie zlewały się z fundamentem/podłogą
+    // zamiast kończyć się widoczną, przyciemnioną plamą koloru.
+    applyHorizonFade(material, LIGHT_HEIGHT, LIGHT_HEIGHT - FADE_RANGE, 0);
+    ridgeSparkles.push({ material, phase: rand() * Math.PI * 2, strength: 0.35 + rand() * 0.3, base: 0.85 });
     return new THREE.LineSegments(geometry, material);
   }
 
-  // Trzy grzbiety zamiast dwóch - bliski/średni/daleki (więcej głębi/detalu).
-  disposeAwareAdd(group, buildRidge(320, 55, 0xff2f9e, 24));
-  disposeAwareAdd(group, buildRidge(420, 80, 0x00eaff, 28));
-  disposeAwareAdd(group, buildRidge(560, 120, 0xff2f9e, 22));
+  // Pięć grzbietów zamiast trzech - gęściej upakowane pasmo gór, więcej
+  // sylwetek nakładających się na siebie przy różnych promieniach/
+  // wysokościach (więcej "brył" low-poly, większa głębia).
+  disposeAwareAdd(group, buildRidge(260, 40, 0x00eaff, 26));
+  disposeAwareAdd(group, buildRidge(320, 55, 0xff2f9e, 26));
+  disposeAwareAdd(group, buildRidge(400, 75, 0x00eaff, 30));
+  disposeAwareAdd(group, buildRidge(480, 100, 0xff2f9e, 26));
+  disposeAwareAdd(group, buildRidge(560, 125, 0x00eaff, 24));
 
   disposeAwareAdd(group, buildStarfield(rand, 220, 0xffffff, 80, 400, 60, 220));
 
+  group.userData.synthRidgeSparkles = ridgeSparkles;
   return group;
+}
+
+// Migot grzbietów - identyczna logika jak edgeSparkles w
+// updateClassicBackground (opacity materiału jako sinusoida wokół base,
+// każdy grzbiet z własną fazą).
+function updateSynthwaveBackground(group, elapsed) {
+  const sparkles = group.userData.synthRidgeSparkles;
+  if (!sparkles) return;
+  for (const s of sparkles) {
+    const twinkle = 0.5 + 0.5 * Math.sin(elapsed * 2.4 + s.phase);
+    s.material.opacity = s.base * (1 - s.strength) + s.base * s.strength * twinkle;
+  }
 }
 
 // --- MATRIX: ściany cyfrowego deszczu -------------------------------------
@@ -671,18 +706,20 @@ function buildSynthwaveBackground() {
 // "spadania" to przesuwanie texture.offset.y co klatkę - tanie, bez
 // dotykania geometrii. Każda kolumna to DWIE płaszczyzny na krzyż (90°),
 // żeby była widoczna z dowolnego kąta kamery, nie tylko "na wprost".
-function buildMatrixCharacterTexture(rand) {
+function buildMatrixCharacterTexture(rand, charSize = 26) {
   const canvas = document.createElement('canvas');
-  canvas.width = 80;
+  // Szerokość canvasu skaluje się z rozmiarem znaku, żeby glify nie robiły
+  // się ciasne/przycięte przy większej czcionce (wariant "dużych" strumieni).
+  canvas.width = Math.round(80 * (charSize / 26));
   canvas.height = 640;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = '26px monospace';
+  ctx.font = `${charSize}px monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
-  for (let y = 14; y < canvas.height; y += 26) {
+  for (let y = charSize / 2; y < canvas.height; y += charSize) {
     const ch = chars[Math.floor(rand() * chars.length)];
     const bright = rand();
     ctx.fillStyle = bright < 0.15 ? '#eaffea' : '#3dff6e';
@@ -701,7 +738,13 @@ function buildMatrixCharacterTexture(rand) {
 function buildMatrixBackground(density = 1) {
   const rand = makeRand(7331);
   const group = new THREE.Group();
-  const baseTexture = buildMatrixCharacterTexture(rand);
+  const baseTexture = buildMatrixCharacterTexture(rand, 26);
+  // Wariant "dużych" strumieni - większe znaki (46px zamiast 26px), losowana
+  // NIEZALEŻNIE dla części strumieni w każdej warstwie (patrz isBig w
+  // addLayer niżej) i celowo dużo wolniejsza (patrz speed niżej) - efekt
+  // kilku "ociężałych", grubszych sznurów znaków przebijających się przez
+  // resztę, standardowej gęstości/prędkości deszczu.
+  const bigTexture = buildMatrixCharacterTexture(rand, 46);
   const columns = [];
 
   // Jedna warstwa strumieni (wywoływana dwa razy - bliżej/dalej, patrz
@@ -718,7 +761,11 @@ function buildMatrixBackground(density = 1) {
       // jej poziomu.
       const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 200, 350);
 
-      const texture = baseTexture.clone();
+      // ~1 na 5 strumieni - duże znaki, wyraźnie wolniejszy spadek (35-50%
+      // normalnej prędkości) i odrobinę szerszy pas (żeby duże glify miały
+      // gdzie "oddychać", nie ocierały się o sąsiednią kolumnę).
+      const isBig = rand() < 0.2;
+      const texture = (isBig ? bigTexture : baseTexture).clone();
       texture.needsUpdate = true;
       texture.repeat.set(1, totalHeight / 14);
       texture.offset.y = rand();
@@ -728,7 +775,7 @@ function buildMatrixBackground(density = 1) {
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
       });
       applyHorizonFade(material);
-      const width = widthMin + rand() * (widthMax - widthMin);
+      const width = (widthMin + rand() * (widthMax - widthMin)) * (isBig ? 1.3 : 1);
       const geometry = new THREE.PlaneGeometry(width, totalHeight);
 
       const cross = new THREE.Group();
@@ -740,10 +787,13 @@ function buildMatrixBackground(density = 1) {
       cross.position.set(sx, centerY, sz);
       disposeAwareAdd(group, cross);
 
+      const speed = isBig
+        ? speedMin * 0.35 + rand() * (speedMax - speedMin) * 0.35
+        : speedMin + rand() * (speedMax - speedMin);
       const cycleDuration = 5 + rand() * 12;
       columns.push({
         texture, material,
-        speed: speedMin + rand() * (speedMax - speedMin),
+        speed,
         cycleDuration,
         cycleOffset: rand() * cycleDuration,
         baseOpacity: opacity
@@ -1036,7 +1086,7 @@ function updateGlacierBackground(group, elapsed, deltaTime) {
 // gęściej, jak zamglona, mroźna dal).
 export const THEME_BACKGROUNDS = {
   classic: { build: buildClassicBackground, fogDensity: 0.0022, update: updateClassicBackground },
-  synthwave: { build: buildSynthwaveBackground, fogDensity: 0.0035 },
+  synthwave: { build: buildSynthwaveBackground, fogDensity: 0.0035, update: updateSynthwaveBackground },
   matrix: { build: buildMatrixBackground, fogDensity: 0.0, update: updateMatrixBackground },
   amber: { build: buildAmberBackground, fogDensity: 0.0035, update: updateAmberBackground },
   glacier: { build: buildGlacierBackground, fogDensity: 0.005, update: updateGlacierBackground }

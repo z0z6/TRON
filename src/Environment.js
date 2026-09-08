@@ -98,8 +98,8 @@ export class SynthwaveEnvironment {
 
   // Wywoływane co klatkę z main.js - deleguje do ewentualnego update() z
   // aktywnego motywu (np. animacja "deszczu" w matrix, opadającego śniegu
-  // w glacier). Motywy bez animacji (classic, synthwave) po prostu nie
-  // definiują update() w rejestrze - ten hak wtedy nic nie robi.
+  // w glacier, migotu krawędzi w classic/synthwave). Motywy bez animacji
+  // po prostu nie definiują update() w rejestrze - ten hak wtedy nic nie robi.
   update(elapsed, deltaTime) {
     if (this._activeUpdate && this.themeGroup) {
       this._activeUpdate(this.themeGroup, elapsed, deltaTime);
