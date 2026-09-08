@@ -51,11 +51,11 @@ const DARKEN_FACTOR = 0.22;  // jak ciemna jest końcowa wersja koloru (nie czer
 // <color_fragment>), więc jeden hak obsługuje wszystkie użyte tu materiały.
 // Obsługuje też InstancedMesh (budynki) - #ifdef USE_INSTANCING uwzględnia
 // macierz KONKRETNEJ instancji, nie tylko wspólnej geometrii bazowej.
-function applyHorizonFade(material, fadeStartY = LIGHT_HEIGHT, fadeEndY = LIGHT_HEIGHT - FADE_RANGE) {
+function applyHorizonFade(material, fadeStartY = LIGHT_HEIGHT, fadeEndY = LIGHT_HEIGHT - FADE_RANGE, darkenFactor = DARKEN_FACTOR) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.fadeStartY = { value: fadeStartY };
     shader.uniforms.fadeEndY = { value: fadeEndY };
-    shader.uniforms.darkenFactor = { value: DARKEN_FACTOR };
+    shader.uniforms.darkenFactor = { value: darkenFactor };
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying float vWorldY;')
@@ -223,8 +223,13 @@ function buildClassicBackground(density = 1) {
       const worldX = px + Math.cos(rotY) * localX - Math.sin(rotY) * localZ;
       const worldZ = pz + Math.sin(rotY) * localX + Math.cos(rotY) * localZ;
       // Tylko WIDOCZNA część budynku (od poziomu podłogi w górę, nie
-      // zakopana część pod areną) - `height`, nie `totalHeight`.
-      const worldY = FLOOR_Y + 1.4 + rand() * Math.max(1, height - 3);
+      // zakopana część pod areną) - `height`, nie `totalHeight`. Rozkład
+      // CELOWO nierównomierny - wykładnik <1 na rand() spycha większość
+      // wylosowanych wartości w górę zakresu, więc diody gęstnieją w
+      // górnej partii ściany (jak światła w wyższych piętrach wieżowca),
+      // zamiast rozkładać się równo po całej wysokości.
+      const heightFrac = Math.pow(rand(), 0.5);
+      const worldY = FLOOR_Y + 1.4 + heightFrac * Math.max(1, height - 3);
 
       // Panel diody leży płasko na ścianie: jego "szeroka" oś biegnie
       // WZDŁUŻ ściany (stąd +90° na ścianach x, bez obrotu na ścianach z).
@@ -343,14 +348,19 @@ function buildClassicBackground(density = 1) {
       // powyżej), nie luźno w przestrzeni. Skalowane density TYLKO
       // łagodnie (0.6-1.0x) - to InstancedMesh, więc nawet przy dużej
       // liczbie nie generuje dodatkowych draw calli.
+      // Zdecydowanie więcej diod niż wcześniej (14-38 zamiast 6-19 na
+      // budynek) - krawędzie kontur świeci teraz tylko na połowie brył
+      // (patrz hasEdge niżej), więc to punkty na powierzchni, nie kontur,
+      // mają nieść większość detalu tła.
       const diodeDensityMul = 0.6 + 0.4 * density;
-      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((6 + Math.floor(rand() * 14)) * diodeDensityMul)));
+      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((14 + Math.floor(rand() * 24)) * diodeDensityMul)));
 
       // Poprzeczne szczeble światła na losowych ścianach tego budynku -
-      // patrz addBuildingRungs powyżej. W PEŁNI skalowane przez density -
-      // to OSOBNE obiekty Line (draw call na każdy), więc to one, nie
-      // diody, realnie odciążają słaby sprzęt.
-      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, Math.round((1 + Math.floor(rand() * 3)) * density));
+      // patrz addBuildingRungs powyżej. Więcej niż wcześniej (3-8 zamiast
+      // 1-3). W PEŁNI skalowane przez density - to OSOBNE obiekty Line
+      // (draw call na każdy), więc to one, nie diody, realnie odciążają
+      // słaby sprzęt.
+      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, Math.round((3 + Math.floor(rand() * 5)) * density));
 
       // Świecąca, skrząca się krawędź TEGO budynku - ta sama technika co
       // lodowe bryły w glacier (EdgesGeometry + LineSegments, opacity
@@ -364,40 +374,57 @@ function buildClassicBackground(density = 1) {
       // dotychczasowym, umiarkowanym poziomie (z lekką zależnością od
       // warstwy głębi przez edgeSparkleStrength - bliżej mocniej, dalej
       // słabiej, tak jak wcześniej).
-      const edgeTierRoll = rand();
-      let edgeBase, edgeStrength, isDimTier;
-      if (edgeTierRoll < 0.5) {
-        edgeBase = 0.1 + rand() * 0.08;
-        edgeStrength = 0.25 + rand() * 0.15;
-        isDimTier = true;
-      } else if (edgeTierRoll < 0.68) {
-        edgeBase = 0.9 + rand() * 0.1;
-        edgeStrength = 0.75 + rand() * 0.2;
-        isDimTier = false;
-      } else {
-        edgeBase = 0.4 + 0.25 * edgeSparkleStrength;
-        edgeStrength = 0.4 + 0.3 * edgeSparkleStrength;
-        isDimTier = false;
-      }
-      // Krawędzie "przyciemnione" są i tak ledwo widoczne (opacity ~0.1-
-      // 0.18) - na niższej gęstości po prostu ich NIE TWORZYMY (zamiast
-      // tworzyć i tak prawie niewidoczny draw call). Jasne/normalne
-      // krawędzie zostają zawsze - to one realnie definiują wygląd sceny.
-      if (!isDimTier || rand() < density) {
-        const edgeColor = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
-        const edgeMaterial = new THREE.LineBasicMaterial({
-          color: edgeColor, transparent: true, opacity: edgeBase, fog: false,
-          blending: THREE.AdditiveBlending, depthWrite: false
-        });
-        const edgeLines = new THREE.LineSegments(edgeBoxGeometry, edgeMaterial);
-        edgeLines.position.set(px, centerY, pz);
-        edgeLines.rotation.y = dummy.rotation.y;
-        edgeLines.scale.set(width, totalHeight, depth);
-        disposeAwareAdd(group, edgeLines);
-        classicEdgeSparkles.push({
-          material: edgeMaterial, phase: rand() * Math.PI * 2,
-          strength: edgeStrength, base: edgeBase
-        });
+      // Nie każdy budynek dostaje świecącą krawędź - tylko ~połowa (z grubsza
+      // co drugia/trzecia bryła, dzięki losowości), reszta zostaje bez
+      // konturu. Krawędzie i tak są teraz gęsto "obudowane" diodami/
+      // szczeblami na powierzchni (patrz addBuildingDiodes/addBuildingRungs
+      // wyżej), więc kontur przestał być jedynym nośnikiem detalu.
+      const hasEdge = rand() < 0.5;
+      if (hasEdge) {
+        const edgeTierRoll = rand();
+        let edgeBase, edgeStrength, isDimTier;
+        if (edgeTierRoll < 0.5) {
+          edgeBase = 0.1 + rand() * 0.08;
+          edgeStrength = 0.25 + rand() * 0.15;
+          isDimTier = true;
+        } else if (edgeTierRoll < 0.68) {
+          edgeBase = 0.9 + rand() * 0.1;
+          edgeStrength = 0.75 + rand() * 0.2;
+          isDimTier = false;
+        } else {
+          edgeBase = 0.4 + 0.25 * edgeSparkleStrength;
+          edgeStrength = 0.4 + 0.3 * edgeSparkleStrength;
+          isDimTier = false;
+        }
+        // Krawędzie "przyciemnione" są i tak ledwo widoczne (opacity ~0.1-
+        // 0.18) - na niższej gęstości po prostu ich NIE TWORZYMY (zamiast
+        // tworzyć i tak prawie niewidoczny draw call). Jasne/normalne
+        // krawędzie zostają zawsze - to one realnie definiują wygląd sceny.
+        if (!isDimTier || rand() < density) {
+          const edgeColor = EDGE_COLORS[Math.floor(rand() * EDGE_COLORS.length)];
+          const edgeMaterial = new THREE.LineBasicMaterial({
+            color: edgeColor, transparent: true, opacity: edgeBase, fog: false,
+            blending: THREE.AdditiveBlending, depthWrite: false
+          });
+          // Ten sam gradient co na powierzchni brył (applyHorizonFade), ale
+          // liczony osobno DLA TEGO KONKRETNEGO budynku (od jego widocznego
+          // szczytu do jego podstawy, nie od wspólnego LIGHT_HEIGHT/
+          // FADE_RANGE) i z darkenFactor=0, nie DARKEN_FACTOR - krawędź ma
+          // wyraźnie ciemnieć w dół i przy samej podstawie całkowicie
+          // zniknąć (nie tylko przygasnąć), zamiast zlewać się z ledwo
+          // przyciemnioną (0.22) fasadą.
+          const edgeFadeStartY = FLOOR_Y + height * 0.55; // górna połowa: pełna jasność
+          applyHorizonFade(edgeMaterial, edgeFadeStartY, FLOOR_Y, 0);
+          const edgeLines = new THREE.LineSegments(edgeBoxGeometry, edgeMaterial);
+          edgeLines.position.set(px, centerY, pz);
+          edgeLines.rotation.y = dummy.rotation.y;
+          edgeLines.scale.set(width, totalHeight, depth);
+          disposeAwareAdd(group, edgeLines);
+          classicEdgeSparkles.push({
+            material: edgeMaterial, phase: rand() * Math.PI * 2,
+            strength: edgeStrength, base: edgeBase
+          });
+        }
       }
 
       // Anteny stoją na WIDOCZNYM wierzchołku budynku (height, nie
