@@ -135,7 +135,7 @@ export class PowerUpSystem {
         });
         break;
         
-      case 'speed':
+      case 'speed': {
         const originalSpeed = player.speed;
         player.speed *= 1.8;
         this.activeEffects.push({
@@ -144,6 +144,7 @@ export class PowerUpSystem {
           onExpire: () => { player.speed = originalSpeed; }
         });
         break;
+      }
         
       case 'ghost':
         player.isGhost = true;

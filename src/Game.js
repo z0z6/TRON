@@ -10,6 +10,7 @@ import { PowerUpSystem } from './PowerUpSystem.js';
 import { ScoringSystem } from './ScoringSystem.js';
 import { AchievementSystem } from './AchievementSystem.js';
 import { debugLog } from './debug.js';
+import { sweepCells, cellsHitDanger, minDistanceToDanger } from './collision.js';
 
 export class Game {
   constructor(scene, camera) {
@@ -199,29 +200,8 @@ export class Game {
   // gracz wyzwalałby to na sobie przy każdym ciasnym skręcie, co byłoby
   // mylące (to przecież nie jest "bliskie starcie" z przeciwnikiem).
   _minDistanceToDanger() {
-    const p = this.player.position;
-    let minDist = this._gridBounds - Math.max(Math.abs(p.x), Math.abs(p.z));
-
-    if (this.opponent && this.opponent.trail) {
-      const pts = this.opponent.trail.points;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const d = this._pointToSegmentDistance(p, pts[i], pts[i + 1]);
-        if (d < minDist) minDist = d;
-      }
-    }
-
-    return minDist;
-  }
-
-  _pointToSegmentDistance(p, a, b) {
-    const abx = b.x - a.x, abz = b.z - a.z;
-    const apx = p.x - a.x, apz = p.z - a.z;
-    const lenSq = abx * abx + abz * abz;
-    let t = lenSq > 0 ? (apx * abx + apz * abz) / lenSq : 0;
-    t = Math.max(0, Math.min(1, t));
-    const cx = a.x + abx * t, cz = a.z + abz * t;
-    const dx = p.x - cx, dz = p.z - cz;
-    return Math.sqrt(dx * dx + dz * dz);
+    const opponentPoints = (this.opponent && this.opponent.trail) ? this.opponent.trail.points : null;
+    return minDistanceToDanger(this.player.position, opponentPoints, this._gridBounds);
   }
 
   // Zwraca listę komórek siatki (jako obiekty {x,z}), przez które PRZESZEDŁ
@@ -241,19 +221,7 @@ export class Game {
   // ta metoda i jej użycie zarówno przy zapisie śladu, jak i w
   // checkCollisions() poniżej.
   _sweepCells(fromPos, toPos) {
-    const cells = [];
-    const fx = Math.floor(fromPos.x), fz = Math.floor(fromPos.z);
-    const tx = Math.floor(toPos.x), tz = Math.floor(toPos.z);
-    if (fx === tx && fz === tz) return cells;
-
-    if (fx !== tx) {
-      const step = tx > fx ? 1 : -1;
-      for (let x = fx + step; x !== tx + step; x += step) cells.push({ x, z: fz });
-    } else {
-      const step = tz > fz ? 1 : -1;
-      for (let z = fz + step; z !== tz + step; z += step) cells.push({ x: fx, z });
-    }
-    return cells;
+    return sweepCells(fromPos, toPos);
   }
 
   handlePlayerInput(action) {
@@ -319,24 +287,7 @@ export class Game {
   // skoku o więcej niż jedną komórkę na klatkę. Kolizja ze śladem
   // PRZECIWNIKA (opponentTrail) liczy się zawsze, bez wyjątków.
   _cellsHitDanger(currentPos, sweptCells, ownTrail, opponentTrail, ownNewCellKeys) {
-    const gridSize = 45;
-    const cellsToCheck = sweptCells.length > 0
-      ? sweptCells
-      : [{ x: Math.floor(currentPos.x), z: Math.floor(currentPos.z) }];
-
-    for (const cell of cellsToCheck) {
-      if (Math.abs(cell.x) > gridSize || Math.abs(cell.z) > gridSize) {
-        return { outOfBounds: true, hitTrail: false };
-      }
-      const key = `${cell.x},${cell.z}`;
-      if (opponentTrail.has(key)) {
-        return { outOfBounds: false, hitTrail: true };
-      }
-      if (ownTrail.has(key) && !(ownNewCellKeys && ownNewCellKeys.has(key))) {
-        return { outOfBounds: false, hitTrail: true };
-      }
-    }
-    return { outOfBounds: false, hitTrail: false };
+    return cellsHitDanger(currentPos, sweptCells, ownTrail, opponentTrail, ownNewCellKeys, this._gridBounds);
   }
 
   checkCollisions() {

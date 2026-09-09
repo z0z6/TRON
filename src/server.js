@@ -29,6 +29,50 @@ const io = new Server(server, {
 // Przechowuj pokoje
 const rooms = new Map();
 
+// --- Walidacja wejścia i podstawowy rate-limit ---
+// Ten serwer to WCIĄŻ tylko relay (patrz komentarz niżej przy app.get('/'))
+// - nie liczy kolizji ani nie rozstrzyga zwycięzcy, więc gracz modyfikujący
+// lokalnego klienta może oszukiwać co do WYNIKU rundy. To jest świadomie
+// zaakceptowane ograniczenie tej wersji (pełne przeniesienie logiki gry na
+// serwer to osobna, większa zmiana). Poniższe funkcje łatają tańszy,
+// bardziej przyziemny problem: serwer ufał KSZTAŁTOWI danych od klienta
+// (roomId, action, itd.) bez żadnej walidacji, co pozwalało zawiesić/
+// zaśmiecić serwer samym malformed payloadem, oraz nie miał żadnego limitu
+// na tworzenie pokoi (trywialny DoS: pętla tworząca tysiące pokoi/s).
+const ROOM_ID_RE = /^[A-Z0-9]{4,10}$/;
+const ALLOWED_ACTIONS = new Set(['turnLeft', 'turnRight']);
+const MAX_ROOM_ID_LOOKUP_LEN = 10;
+
+function isValidRoomId(roomId) {
+  return typeof roomId === 'string' && roomId.length <= MAX_ROOM_ID_LOOKUP_LEN && ROOM_ID_RE.test(roomId);
+}
+
+function isValidAction(action) {
+  return typeof action === 'string' && ALLOWED_ACTIONS.has(action);
+}
+
+// Bardzo prosty token-bucket per socket, tylko dla 'create-room' (najbardziej
+// oczywisty wektor spamu: tanie w wywołaniu, tworzy stan na serwerze).
+// Nieproporcjonalnie prostszy niż pełny rate-limiter, ale wystarcza, żeby
+// jeden klient nie mógł zalać serwera tysiącami pokoi w kilka sekund.
+const ROOM_CREATE_LIMIT = 5;
+const ROOM_CREATE_WINDOW_MS = 60 * 1000;
+const roomCreateTimestamps = new Map(); // socket.id -> number[]
+
+function isRoomCreateRateLimited(socketId) {
+  const now = Date.now();
+  const timestamps = (roomCreateTimestamps.get(socketId) || []).filter(
+    (t) => now - t < ROOM_CREATE_WINDOW_MS
+  );
+  if (timestamps.length >= ROOM_CREATE_LIMIT) {
+    roomCreateTimestamps.set(socketId, timestamps);
+    return true;
+  }
+  timestamps.push(now);
+  roomCreateTimestamps.set(socketId, timestamps);
+  return false;
+}
+
 // Ten serwer NIE serwuje plików klienta - to wyłącznie backend WebSocket
 // (Socket.io) dla trybu multiplayer. Statyczny klient 3D jest hostowany
 // osobno przez GitHub Pages (patrz faza 0: base: '/TRON/3d/' w
@@ -44,6 +88,13 @@ io.on('connection', (socket) => {
   
   // Utwórz pokój
   socket.on('create-room', (data, callback) => {
+    if (typeof callback !== 'function') return;
+
+    if (isRoomCreateRateLimited(socket.id)) {
+      callback({ success: false, error: 'Too many rooms created, try again later' });
+      return;
+    }
+
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     
     rooms.set(roomId, {
@@ -66,6 +117,13 @@ io.on('connection', (socket) => {
   
   // Dołącz do pokoju
   socket.on('join-room', (data, callback) => {
+    if (typeof callback !== 'function') return;
+
+    if (!data || !isValidRoomId(data.roomId)) {
+      callback({ success: false, error: 'Invalid room id' });
+      return;
+    }
+
     const room = rooms.get(data.roomId);
     
     if (!room) {
@@ -102,8 +160,10 @@ io.on('connection', (socket) => {
   
   // Input gracza
   socket.on('player-input', (data) => {
+    if (!data || !isValidRoomId(data.roomId) || !isValidAction(data.action)) return;
+
     const room = rooms.get(data.roomId);
-    if (!room) return;
+    if (!room || !room.players.includes(socket.id)) return;
     
     // Przekaż input do innych graczy w pokoju
     socket.to(data.roomId).emit('player-input', {
@@ -116,6 +176,7 @@ io.on('connection', (socket) => {
   
   // Aktualizacja stanu gry (tylko host wysyła)
   socket.on('game-state-update', (data) => {
+    if (!data || !isValidRoomId(data.roomId)) return;
     const room = rooms.get(data.roomId);
     if (!room || room.host !== socket.id) return;
     
@@ -125,6 +186,7 @@ io.on('connection', (socket) => {
   
   // Rozpocznij grę
   socket.on('start-game', (data) => {
+    if (!data || !isValidRoomId(data.roomId)) return;
     const room = rooms.get(data.roomId);
     if (!room || room.host !== socket.id) return;
     
@@ -143,6 +205,7 @@ io.on('connection', (socket) => {
   
   // Zakończ grę
   socket.on('game-end', (data) => {
+    if (!data || !isValidRoomId(data.roomId)) return;
     const room = rooms.get(data.roomId);
     if (!room) return;
     
@@ -158,6 +221,7 @@ io.on('connection', (socket) => {
   
   // Opuść pokój
   socket.on('leave-room', (data) => {
+    if (!data || !isValidRoomId(data.roomId)) return;
     const room = rooms.get(data.roomId);
     if (!room) return;
     
@@ -183,7 +247,9 @@ io.on('connection', (socket) => {
   // Rozłącz
   socket.on('disconnect', () => {
     debugLog('Player disconnected:', socket.id);
-    
+
+    roomCreateTimestamps.delete(socket.id);
+
     // Usuń gracza ze wszystkich pokoi
     for (const [roomId, room] of rooms.entries()) {
       if (room.players.includes(socket.id)) {
