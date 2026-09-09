@@ -4,10 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>TRON Light Cycles 3D</title>
+    <!-- Orbitron: futurystyczna display font na nagłówki/przyciski/HUD -
+         zastępuje domyślną systemową 'Segoe UI', która przy tak mocno
+         stylizowanym, neonowym tle wyglądała "biurowo". Monospace na
+         liczbach (wynik, timer) zostaje bez zmian - to świadomy kontrast,
+         nie przeoczenie. preconnect przyspiesza pierwsze pobranie fontu;
+         brak połączenia (offline/zablokowane CDN) po prostu cicho spada
+         do fallbacku w --font-display poniżej, gra działa dalej. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
+            /* Nagłówki/przyciski/etykiety HUD-u - patrz komentarz przy <link>
+               fontu w <head>. Fallback identyczny jak poprzedni sztywny stos,
+               więc bez połączenia z Google Fonts UI wygląda dokładnie tak jak
+               wcześniej (brak "goły tekst" migotania stylu). */
+            --font-display: 'Orbitron', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
             /* === MOTYW KOLORYSTYCZNY ===
                Domyślne wartości = TRON CLASSIC (dokładnie to, co było na
                sztywno wcześniej). JS (theme-picker) nadpisuje je przy
@@ -102,7 +118,7 @@
             top: 20px;
             right: 20px;
             z-index: 10;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             color: var(--theme-p1);
             text-align: right;
             pointer-events: none;
@@ -143,7 +159,7 @@
             top: 180px;
             right: 20px;
             z-index: 10;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             font-size: 15px;
             color: #ffee00;
             text-shadow: 0 0 10px rgba(255, 238, 0, 0.8);
@@ -165,7 +181,7 @@
             border-radius: 8px;
             padding: 12px 20px;
             box-shadow: 0 0 25px rgba(255, 200, 0, 0.4);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             color: #ffe9b0;
             pointer-events: none;
             opacity: 0;
@@ -193,7 +209,7 @@
             align-items: center;
             justify-content: center;
             background: rgba(3, 5, 12, 0.82);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             color: #e0f7fc;
             padding: 16px;
         }
@@ -489,7 +505,7 @@
         }
 
         .rotate-text {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             font-size: clamp(0.95rem, 4vw, 1.15rem);
             font-weight: bold;
             letter-spacing: 2.5px;
@@ -651,7 +667,7 @@
             border: 3px solid var(--theme-p1);
             border-radius: 40px;
             color: var(--theme-p1);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             font-weight: bold;
             font-size: clamp(1rem, 3vw, 1.2rem);
             letter-spacing: 3px;
@@ -679,7 +695,7 @@
             border: 1px solid var(--theme-p1);
             border-radius: 20px;
             color: var(--theme-p1);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             font-weight: bold;
             font-size: clamp(0.65rem, 2.2vw, 0.8rem);
             letter-spacing: 1.5px;
@@ -729,17 +745,71 @@
         #pauseOverlay.show { display: flex; }
 
         #pauseOverlay span {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-display);
             font-size: clamp(2rem, 8vw, 3.2rem);
             font-weight: bold;
             letter-spacing: 6px;
             color: var(--theme-p1);
             text-shadow: 0 0 24px var(--theme-p1);
         }
+
+        /* === EKRAN ŁADOWANIA ===
+           Widoczny domyślnie (bez klasy .hide) - zakrywa ekran, dopóki
+           main.js nie doczeka się preloadLightCycleTemplate() (model GLTF
+           motocykla). Bez tego pierwsza klatka po starcie potrafiła
+           pokazać na moment pustą/nieukształtowaną scenę zanim wszystko
+           się złoży - krótkie, ale zauważalne "mignięcie" przy każdym
+           wejściu na stronę. z-index tuż poniżej #errorBanner (9999), żeby
+           błąd ładowania (np. model się nie wczytał) był zawsze widoczny
+           NAD tym overlayem, a nie pod nim. */
+        #loadingOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9998;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            background: radial-gradient(ellipse at center, #0c1220 0%, #030509 75%);
+            transition: opacity 0.4s ease;
+        }
+
+        #loadingOverlay.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #loadingOverlay .loading-title {
+            font-family: var(--font-display);
+            font-weight: 900;
+            font-size: clamp(1.6rem, 6vw, 2.6rem);
+            letter-spacing: 8px;
+            color: var(--theme-p1);
+            text-shadow: 0 0 20px var(--theme-p1), 0 0 40px var(--theme-p1);
+        }
+
+        #loadingOverlay .loading-spinner {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 3px solid rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.2);
+            border-top-color: var(--theme-p1);
+            box-shadow: 0 0 16px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
+            animation: loadingSpin 0.9s linear infinite;
+        }
+
+        @keyframes loadingSpin {
+            to { transform: rotate(360deg); }
+        }
     </style>
   <script type="module" src="./main.js"></script>
 </head>
 <body>
+    <div id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-title">TRON</div>
+    </div>
     <div id="errorBanner"></div>
     <script>
         // === ŁAPACZ BŁĘDÓW - musi być pierwszym skryptem w <body>, żeby
@@ -749,6 +819,8 @@
             function show(msg) {
                 banner.textContent += (banner.textContent ? '\n\n' : '') + msg;
                 banner.classList.add('show');
+                var loader = document.getElementById('loadingOverlay');
+                if (loader) loader.classList.add('hide');
             }
             window.addEventListener('error', function (e) {
                 show('BŁĄD JS: ' + e.message + '\n  w ' + (e.filename || '?') + ':' + e.lineno + ':' + e.colno);

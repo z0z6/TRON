@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { createVignettePass } from './VignettePass.js';
 import { Game } from './Game.js';
 import { Grid } from './Grid.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
@@ -84,6 +85,16 @@ const bloomPass = new UnrealBloomPass(
 composer.addPass(bloomPass);
 bloomPass.enabled = quality.bloom;
 
+// Vignette + delikatne skanlinie (VignettePass.js) - PO bloomie (działa na
+// już "rozświetlonym" obrazie), PRZED OutputPass (który musi zostać
+// ostatni, żeby poprawnie domknąć kodowanie kolorów/tone mapping - patrz
+// komentarz przy renderer.toneMapping wyżej). Bardzo tani pass (patrz
+// komentarz w VignettePass.js), ale i tak gaszony razem z bloomem na "low"
+// tierze - tam liczy się każdy dodatkowy fullscreen pass.
+const vignettePass = createVignettePass(initialSize.width, initialSize.height);
+composer.addPass(vignettePass);
+vignettePass.enabled = quality.bloom;
+
 // OutputPass dba o poprawne kodowanie kolorów/tone mapping na wyjściu -
 // bez tego bloom potrafi "wypłukać" kolory.
 composer.addPass(new OutputPass());
@@ -131,6 +142,11 @@ scene.add(grid.mesh);
 // top-level await w module scope.
 (async () => {
   await preloadLightCycleTemplate();
+
+  // Model wczytany - odsłoń scenę. `?.` na wypadek, gdyby ktoś usunął
+  // #loadingOverlay z index.html (np. w niestandardowym forku) - loader
+  // jest kosmetyczny, jego brak nie powinien wywalać reszty inicjalizacji.
+  document.getElementById('loadingOverlay')?.classList.add('hide');
 
   // Wybór trudności AI przeciwnika (single-player) - wcześniej ta wartość
   // była wszędzie zaszyta na sztywno jako 'medium', więc AI.js nigdy realnie
@@ -517,6 +533,7 @@ scene.add(grid.mesh);
     renderer.setSize(size.width, size.height);
     composer.setSize(size.width, size.height);
     bloomPass.setSize(size.width, size.height);
+    vignettePass.uniforms.uResolution.value.set(size.width, size.height);
   }
 
   window.addEventListener('resize', applyViewportSize);

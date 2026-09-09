@@ -62,12 +62,54 @@ korzenia repo `TRON/`, więc wystarczy je nadpisać/dodać один po drugim.
 Łącznie testów w paczce: **29** (17 collision + 5 trail + 7 fov),
 wszystkie zielone; `npm run lint` bez błędów; `npm run build` przechodzi.
 
+## Runda 3 — dokończenie wizualnej listy (nowe/zmienione w tej paczce)
+
+### Scena 3D
+- `src/Trail.js` — materiał śladu zamieniony z `MeshBasicMaterial` na
+  prosty `ShaderMaterial` z pionowym gradientem: jasny, rozjaśniony rdzeń
+  koloru gracza blisko podłoża (y=0), gasnący do pełnej barwy i większej
+  przezroczystości ku górze. Bufor geometrii/`drawRange` z Rundy 1 —
+  bez zmian, tylko materiał się różni. `setColor()` zapisuje teraz do
+  `material.uniforms.uColor` zamiast `material.color`.
+- `src/LightCycleModel.js` — "blob shadow" (płaski, miękko rozmyty dysk
+  cienia) pod każdym motocyklem (gracz/AI/przeciwnik sieciowy — dodany raz,
+  w `createLightCycleMesh()`, więc automatycznie trafia do wszystkich
+  trzech). Geometria WSPÓŁDZIELONA (jak geometrie modelu GLTF — nigdy nie
+  disposowana per-instancja), materiał tworzony świeżo per motocykl (bo
+  `AI.js`/`RemotePlayer.js` `dispose()` bezwarunkowo disposuje każdy
+  materiał znaleziony przez `traverse()` — współdzielony materiał by się
+  tu połamał przy zniszczeniu jednego motocykla).
+
+### UI / HUD
+- `src/index.html`:
+  - Font **Orbitron** (Google Fonts, z fallbackiem identycznym jak
+    poprzedni sztywny stos) przez nową zmienną `--font-display`,
+    podmienioną we wszystkich 8 miejscach, gdzie wcześniej był
+    zaszyty `'Segoe UI', Roboto, Helvetica, Arial, sans-serif`. Liczby
+    HUD-u (monospace/Courier) — bez zmian, to świadomy kontrast.
+  - **Ekran ładowania** (`#loadingOverlay`) — widoczny od razu, ukrywany
+    w `main.js` zaraz po `preloadLightCycleTemplate()`. Jeśli preload się
+    nie powiedzie, globalny łapacz błędów w `index.html` też go chowa
+    (żeby nie zasłaniał komunikatu o błędzie).
+- `src/VignettePass.js` — nowy plik: tani fullscreen `ShaderPass`
+  (vignette + bardzo subtelne skanlinie), dopięty w `main.js` do
+  istniejącego `EffectComposer` między bloomem a `OutputPass`. Gaszony na
+  "low" tierze tą samą flagą co bloom (`quality.bloom`). Aktualizowany
+  przy resize razem z `bloomPass.setSize(...)`.
+
+Testy jednostkowe bez zmian liczbowych względem Rundy 2 (29) — zmiany w
+tej rundzie są czysto wizualne/DOM, poza zasięgiem obecnych testów, które
+celowo sprawdzają tylko logikę, nie renderowanie. `npm run lint`: 0
+błędów. `npm run build`: przechodzi (69 modułów, +1 za `VignettePass.js`).
+
+## Jak przetestować po podmianie
+
 
 
 ```bash
 cd src
 npm install
-npm test        # 22 testy Vitest — wszystkie powinny przejść
+npm test        # 29 testów Vitest — wszystkie powinny przejść
 npm run lint     # 0 błędów, kilka niegroźnych warningów w niezmienionym kodzie
 npm run build    # sanity check, że produkcyjny build wciąż się buduje
 npm run dev      # zwykła gra w przeglądarce - single player powinien wyglądać identycznie

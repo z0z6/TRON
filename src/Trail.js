@@ -31,6 +31,42 @@ import * as THREE from 'three';
 const INITIAL_QUAD_CAPACITY = 512; // z zapasem - typowa runda ma kilkadziesiąt skrętów
 const FLOATS_PER_QUAD = 18; // 2 trójkąty * 3 wierzchołki * 3 współrzędne
 
+// Pionowy gradient śladu: jasny, niemal biały rdzeń blisko poziomu jezdni
+// (y=0), gasnący do właściwego koloru gracza/przeciwnika i większej
+// przezroczystości ku górze (y=height). Ma dać efekt "świetlnego muru"
+// zamiast płaskiego, jednolitego prostokąta z poprzedniej wersji (zwykły
+// MeshBasicMaterial). Zależy WYŁĄCZNIE od lokalnej współrzędnej Y wierzchołka
+// (0..height) - bezpieczne, bo mesh Trail nigdy nie ma własnej rotacji/skali
+// (patrz konstruktor: dodawany do sceny z tożsamościową transformacją,
+// wszystkie współrzędne X/Z w buforze już są w przestrzeni świata).
+const TRAIL_VERTEX_SHADER = `
+  varying float vY;
+  void main() {
+    vY = position.y;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const TRAIL_FRAGMENT_SHADER = `
+  uniform vec3 uColor;
+  uniform float uHeight;
+  uniform float uOpacity;
+  varying float vY;
+
+  void main() {
+    float t = clamp(vY / uHeight, 0.0, 1.0);
+    // 1.0 tuż przy podłożu, gasnące do 0.0 już w ~35% wysokości - rdzeń ma
+    // być wyraźny, ale wąski, nie zalewać całego śladu jasnością.
+    float core = 1.0 - smoothstep(0.0, 0.35, t);
+    // Rozjaśniona wersja koloru gracza (NIE czysta biel) - rdzeń ma dalej
+    // czytelnie "należeć" do koloru tego gracza, tylko jaśniejszy.
+    vec3 coreColor = mix(uColor, vec3(1.0), 0.6);
+    vec3 finalColor = mix(uColor, coreColor, core);
+    float alpha = uOpacity * mix(0.35, 1.0, core);
+    gl_FragColor = vec4(finalColor, alpha);
+  }
+`;
+
 export class Trail {
   constructor(scene, color = 0x00ffff, height = 1.2) {
     this.scene = scene;
@@ -49,10 +85,15 @@ export class Trail {
     this.geometry.setAttribute('position', this._positionAttribute);
     this.geometry.setDrawRange(0, 0);
 
-    this.material = new THREE.MeshBasicMaterial({
-      color: this.color,
+    this.material = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(this.color) },
+        uHeight: { value: this.height },
+        uOpacity: { value: 0.85 }
+      },
+      vertexShader: TRAIL_VERTEX_SHADER,
+      fragmentShader: TRAIL_FRAGMENT_SHADER,
       transparent: true,
-      opacity: 0.85,
       side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending,
       depthWrite: false
@@ -65,7 +106,7 @@ export class Trail {
 
   setColor(color) {
     this.color = color;
-    this.material.color.set(color);
+    this.material.uniforms.uColor.value.set(color);
   }
 
   _dirKey(direction) {

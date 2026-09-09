@@ -39,6 +39,71 @@ const MODEL_ROTATION_Y = Math.PI / 2;
 const MODEL_OFFSET_Y = 0.044;
 const MODEL_OFFSET_Z = 0.335;
 
+// --- Blob shadow ---
+// Tani zamiennik prawdziwych cieni (shadowMap): bez niego motocykle
+// "unosiły się" nad areną bez żadnego kontaktu wizualnego z podłożem.
+// Zamiast kosztownego (i przy 60fps arcade'owej grze niepotrzebnego)
+// PCFSoftShadowMap, to zwykły płaski dysk z miękką, radialną teksturą
+// (jasny/nieprzezroczysty środek gasnący do pełnej przezroczystości na
+// brzegu) narysowany tuż nad płaszczyzną y=0. Tekstura jest tworzona RAZ i
+// współdzielona między wszystkimi motocyklami (ten sam wzorzec co
+// getParticleSpriteTexture() w Effects.js) - bezpieczne, bo dispose()
+// materiału NIE dispose'uje przypisanych mu tekstur.
+let sharedShadowBlobTexture = null;
+function getShadowBlobTexture() {
+  if (sharedShadowBlobTexture) return sharedShadowBlobTexture;
+
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(0,0,0,0.55)');
+  gradient.addColorStop(0.7, 'rgba(0,0,0,0.22)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+
+  sharedShadowBlobTexture = new THREE.CanvasTexture(canvas);
+  return sharedShadowBlobTexture;
+}
+
+const SHADOW_BLOB_RADIUS = 1.6; // dopasowany do długości motocykla (~2 jednostki, patrz MODEL_SCALE wyżej)
+const SHADOW_BLOB_Y = 0.02; // ledwie nad y=0 - unika z-fightingu z podłożem areny, niezauważalne wizualnie
+
+// Geometria współdzielona (tak samo jak geometrie modelu GLTF - patrz
+// komentarz w AI.js/RemotePlayer.js dispose()) - identyczna dla każdego
+// motocykla (stały promień/segmenty), więc nie ma powodu alokować nowej
+// za każdym razem. NIGDY nie jest disposowana per-instancja z tego samego
+// powodu, co geometrie GLTF: zniszczyłoby to cień u WSZYSTKICH innych,
+// wciąż żywych motocykli. Materiał (w createShadowBlobMesh() poniżej)
+// zostaje NADAL tworzony świeżo za każdym razem - to on jest bezpiecznie
+// disposowany per-instancja przez istniejącą pętlę traverse() w
+// AI.js/RemotePlayer.js.
+let sharedShadowBlobGeometry = null;
+function getShadowBlobGeometry() {
+  if (!sharedShadowBlobGeometry) {
+    sharedShadowBlobGeometry = new THREE.CircleGeometry(SHADOW_BLOB_RADIUS, 24);
+  }
+  return sharedShadowBlobGeometry;
+}
+
+function createShadowBlobMesh() {
+  const material = new THREE.MeshBasicMaterial({
+    map: getShadowBlobTexture(),
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false // to zwykła, płaska czerń z alpha - nie chcemy, żeby filmowy tone mapping (main.js) cokolwiek jej robił, tak jak neonom
+  });
+  const mesh = new THREE.Mesh(getShadowBlobGeometry(), material);
+  mesh.rotation.x = -Math.PI / 2; // CircleGeometry domyślnie leży w płaszczyźnie XY - obrót kładzie ją płasko na podłożu (XZ)
+  mesh.position.y = SHADOW_BLOB_Y;
+  mesh.renderOrder = -1; // rysuj PRZED resztą (motocykl/ślady), żeby cień nigdy niczego wizualnie nie "przebijał"
+  return mesh;
+}
+
 let templatePromise = null;
 let template = null;
 
@@ -139,6 +204,15 @@ export function createLightCycleMesh(color) {
   Object.defineProperty(group, 'material', {
     get() { return auraMaterial; }
   });
+
+  // Blob shadow - dodany PO pętli traverse() wyżej (celowo), żeby jej
+  // logika klonowania materiałów "Light" go nie dotknęła - to zwykły,
+  // odrębny materiał, nie część modelu GLTF. Dziecko GRUPY, nie `inner`:
+  // `inner` niesie skalę/obrót/offset SAMEGO MODELU (patrz komentarz przy
+  // MODEL_OFFSET_* wyżej), a cień ma zostać zwykłym, poziomym kołem
+  // wyśrodkowanym pod całym pojazdem niezależnie od tych wewnętrznych
+  // korekt.
+  group.add(createShadowBlobMesh());
 
   return group;
 }
