@@ -124,9 +124,21 @@ scene.add(grid.mesh);
 (async () => {
   await preloadLightCycleTemplate();
 
+  // Wybór trudności AI przeciwnika (single-player) - wcześniej ta wartość
+  // była wszędzie zaszyta na sztywno jako 'medium', więc AI.js nigdy realnie
+  // nie widział poziomów 'easy'/'hard', mimo że sam interfejs setDifficulty()
+  // istniał. Deklarowane TU (przed initOpponent), bo także pierwszy,
+  // "przedstartowy" przeciwnik ma się od razu urodzić z właściwym poziomem.
+  // Gracz zmienia trudność klawiszem 1 (albo dotykiem etykiety na mobile)
+  // przed startem rundy; wybór jest zapamiętywany w localStorage.
+  const DIFFICULTY_CYCLE = ['easy', 'medium', 'hard'];
+  const DIFFICULTY_LABELS = { easy: 'ŁATWY', medium: 'ŚREDNI', hard: 'TRUDNY' };
+  let selectedDifficulty = localStorage.getItem('tron_difficulty') || 'medium';
+  if (!DIFFICULTY_CYCLE.includes(selectedDifficulty)) selectedDifficulty = 'medium';
+
   const game = new Game(scene, camera);
   game.initPlayer(undefined, hexToNum(initialTheme.p1));
-  game.initOpponent(new THREE.Vector3(15, 0, 0), hexToNum(initialTheme.p2), 'medium');
+  game.initOpponent(new THREE.Vector3(15, 0, 0), hexToNum(initialTheme.p2), selectedDifficulty);
 
   // Zmiana motywu w UI (theme-picker w index.html) działa NA ŻYWO - nie trzeba
   // czekać do kolejnej rundy. Nasłuchujemy zdarzenia wysyłanego przez ten
@@ -228,6 +240,29 @@ scene.add(grid.mesh);
   const effectsHudEl = document.getElementById('effectsHud');
   const toastHudEl = document.getElementById('toastHud');
   const touchStartBtnEl = document.getElementById('touchStartBtn');
+  const difficultyBadgeEl = document.getElementById('difficultyBadge');
+
+  function updateDifficultyBadge() {
+    if (!difficultyBadgeEl) return;
+    difficultyBadgeEl.textContent = `TRUDNOŚĆ: ${DIFFICULTY_LABELS[selectedDifficulty]} (1, aby zmienić)`;
+  }
+
+  function cycleDifficulty() {
+    // Zmiana trudności w trakcie trwającej rundy nic by nie dała (AI już
+    // istnieje z ustawioną trudnością aż do restartu) i myliłaby gracza, więc
+    // pozwalamy na to tylko na ekranie startowym/po zakończonej rundzie -
+    // dokładnie tak samo jak dotykowy przycisk startu (touchStartBtnEl).
+    if (game.isStarted && !game.gameOver) return;
+    const idx = DIFFICULTY_CYCLE.indexOf(selectedDifficulty);
+    selectedDifficulty = DIFFICULTY_CYCLE[(idx + 1) % DIFFICULTY_CYCLE.length];
+    localStorage.setItem('tron_difficulty', selectedDifficulty);
+    updateDifficultyBadge();
+  }
+  updateDifficultyBadge();
+  if (difficultyBadgeEl) {
+    difficultyBadgeEl.addEventListener('touchstart', (e) => { e.preventDefault(); cycleDifficulty(); }, { passive: false });
+    difficultyBadgeEl.addEventListener('click', cycleDifficulty);
+  }
 
   const EFFECT_LABELS = {
     shield: '🛡️ TARCZA',
@@ -386,7 +421,7 @@ scene.add(grid.mesh);
         if (connected) lobbyUI.show();
       });
     } else {
-      game.restart(game._currentDifficulty || 'medium');
+      game.restart(game._currentDifficulty || selectedDifficulty);
     }
   });
 
@@ -401,6 +436,9 @@ scene.add(grid.mesh);
     // widok gry (tap podczas gry i tak nic by nie zrobił, patrz guard w
     // listenerze, ale wizualnie to zbędny bałagan).
     touchStartBtnEl.style.display = game.isStarted ? 'none' : '';
+    if (difficultyBadgeEl) {
+      difficultyBadgeEl.style.display = (game.isStarted && !game.gameOver) ? 'none' : '';
+    }
 
     const activeEffects = game.powerUpSystem.getActiveEffects();
     effectsHudEl.innerHTML = '';
@@ -426,7 +464,18 @@ scene.add(grid.mesh);
   function animate(currentTime) {
     requestAnimationFrame(animate);
   
-    const deltaTime = (currentTime - lastTime) / 1000;
+    // Cap deltaTime na 1/30s. Kolizje liczone są w Game.js/AI.js jako
+    // pojedyncza komórka siatki (Math.floor(pozycja)) w miejscu, w które
+    // cykl WŁAŚNIE wjechał - bez tego capa, jedna dłuższa klatka (przełączenie
+    // karty, GC pause, telefon usypiający ekran) potrafi przesunąć cykl o
+    // więcej niż jedną komórkę na raz i "przeskoczyć" przez ślad przeciwnika
+    // albo przez granicę planszy bez wykrycia kolizji. Efekt uboczny przy
+    // realnie długiej przerwie (np. zakładka w tle przez minutę): gra po
+    // powrocie na chwilę "zwolni" (będzie nadrabiać ruch klatka po klatce
+    // zamiast jednym susem) zamiast oszukiwać fizykę - to pożądany kompromis
+    // dla gry, w której jeden przeskoczony hex = niesprawiedliwa śmierć.
+    const rawDeltaTime = (currentTime - lastTime) / 1000;
+    const deltaTime = Math.min(rawDeltaTime, 1 / 30);
     lastTime = currentTime;
     adaptiveQuality.sample(deltaTime);
   
@@ -489,14 +538,14 @@ scene.add(grid.mesh);
 
   document.getElementById('touchStartBtn').addEventListener('touchstart', (e) => {
     e.preventDefault();
-    if (!game.isStarted) game.startSinglePlayer('medium');
+    if (!game.isStarted) game.startSinglePlayer(selectedDifficulty);
   }, { passive: false });
 
   document.getElementById('fnRestart3d').addEventListener('touchstart', (e) => {
     e.preventDefault();
     // Ta sama zasada co klawisz R - restart nie jest zsynchronizowany przez
     // sieć, więc w multiplayer go blokujemy (patrz komentarz przy klawiszu R).
-    if (!game.isMultiplayer) game.restart('medium');
+    if (!game.isMultiplayer) game.restart(selectedDifficulty);
   }, { passive: false });
 
   document.getElementById('fnCamera3d').addEventListener('touchstart', (e) => {
@@ -555,8 +604,12 @@ scene.add(grid.mesh);
   
     if (e.key === ' ' || e.key === 'Enter') {
       if (!game.isStarted) {
-        game.startSinglePlayer('medium');
+        game.startSinglePlayer(selectedDifficulty);
       }
+    }
+
+    if (e.key === '1') {
+      cycleDifficulty();
     }
   
     if (e.key === 'r' || e.key === 'R') {
@@ -566,7 +619,7 @@ scene.add(grid.mesh);
       // tego, po zakończonym meczu multiplayer, gracz wraca do lobby (patrz
       // klawisz L) i zaczyna nowy mecz od nowego 'game-start'.
       if (!game.isMultiplayer) {
-        game.restart('medium');
+        game.restart(selectedDifficulty);
       }
     }
   

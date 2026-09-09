@@ -1,6 +1,27 @@
 import * as THREE from 'three';
 import { Trail } from './Trail.js';
 import { createLightCycleMesh } from './LightCycleModel.js';
+import { debugLog } from './debug.js';
+
+// Parametry per poziom trudności, użyte w makeDecision() poniżej.
+// - lookahead: sufit BFS w countReachableSpace - jak "daleko" AI widzi, że
+//   jakiś kierunek prowadzi w ślepy zaułek. Niski = AI reaguje dopiero
+//   tuż przed ścianą; wysoki = planuje z dużym wyprzedzeniem.
+// - decisionIntervalMs: jak często AI w ogóle "myśli" (poza reakcją na
+//   przeszkodę tuż przed sobą, która zawsze jest natychmiastowa) - rzadziej
+//   myślący przeciwnik jedzie bardziej "na pałę" między przeszkodami.
+// - mistakeChance: szansa, że w NIEnagłej sytuacji (nie ma przeszkody tuż
+//   przed nosem) AI zignoruje najlepszą opcję i wybierze losowo spośród
+//   bezpiecznych kandydatów zamiast tej z największą przestrzenią - to
+//   właśnie różnicuje "łatwy" od "trudny" tam, gdzie oba widzą to samo.
+// - chaseWeight: dodatkowy bonus do wyniku kandydata za skracanie dystansu
+//   do gracza - na wyższych poziomach AI nie tylko unika śmierci, ale
+//   aktywnie ściga/odcina, zamiast błądzić po pustej przestrzeni.
+const DIFFICULTY_SETTINGS = {
+  easy:   { lookahead: 90,  decisionIntervalMs: 320, mistakeChance: 0.35, chaseWeight: 0 },
+  medium: { lookahead: 400, decisionIntervalMs: 180, mistakeChance: 0.10, chaseWeight: 0.5 },
+  hard:   { lookahead: 700, decisionIntervalMs: 90,  mistakeChance: 0,    chaseWeight: 1.5 }
+};
 
 export class AI {
   constructor(scene, startPosition, color = 0xff00ff, difficulty = 'medium') {
@@ -10,9 +31,9 @@ export class AI {
     this.color = color;
     this.speed = 10;
     this.visible = true;
-    this.difficulty = difficulty;
+    this.setDifficulty(difficulty);
     
-    console.log('AI created at:', this.position, 'direction:', this.direction);
+    debugLog('AI created at:', this.position, 'direction:', this.direction);
     
     this.createMesh();
     this.trail = new Trail(this.scene, this.color);
@@ -24,7 +45,7 @@ export class AI {
     this.mesh.position.copy(this.position);
     this.scene.add(this.mesh);
     
-    console.log('AI mesh created and added to scene');
+    debugLog('AI mesh created and added to scene');
   }
 
   setColor(color) {
@@ -108,12 +129,15 @@ export class AI {
 
     // Pełna ocena przestrzeni (flood-fill x3 kierunki) jest stosunkowo droga,
     // więc liczymy ją tylko gdy trzeba: albo mamy przeszkodę tuż przed sobą
-    // (decyzja "na już"), albo minął kawałek czasu od ostatniej oceny -
-    // dzięki temu AI wciąż regularnie "rozgląda się", zamiast jechać ślepo
-    // prosto aż w ścianę.
+    // (decyzja "na już" - ZAWSZE natychmiastowa, niezależnie od trudności,
+    // inaczej AI dosłownie wjeżdżałoby w ściany na easy), albo minął kawałek
+    // czasu od ostatniej oceny (ten odstęp zależy od trudności - patrz
+    // DIFFICULTY_SETTINGS) - dzięki temu AI wciąż regularnie "rozgląda się",
+    // zamiast jechać ślepo prosto aż w ścianę.
     const now = performance.now();
     const needsUrgentDecision = !forwardNearFree;
-    const dueForPeriodic = !this._lastSmartDecision || (now - this._lastSmartDecision) > 180;
+    const dueForPeriodic = !this._lastSmartDecision ||
+      (now - this._lastSmartDecision) > this.settings.decisionIntervalMs;
 
     if (!needsUrgentDecision && !dueForPeriodic) {
       return null;
@@ -128,31 +152,54 @@ export class AI {
       { turn: 'right', dir: rightDir }
     ];
 
-    let bestTurn = null;
-    let bestScore = -1;
+    const scored = [];
     for (const c of candidates) {
       const landing = this.position.clone().add(c.dir.clone().multiplyScalar(nearAheadDist));
       if (!this.isCellFree(landing.x, landing.z, playerTrail, aiTrail)) continue;
 
-      const space = this.countReachableSpace(landing.x, landing.z, playerTrail, aiTrail);
+      const space = this.countReachableSpace(landing.x, landing.z, playerTrail, aiTrail, this.settings.lookahead);
+
+      // chaseWeight>0 (medium/hard): premia za zbliżanie się do gracza, żeby
+      // AI aktywnie ścigało/odcinało zamiast tylko unikać własnej śmierci.
+      // Liczona jako "o ile ten kandydat skraca dystans do gracza względem
+      // obecnej pozycji" - ujemna wartość (oddalanie się) obniża wynik.
+      const currentDistToPlayer = this.position.distanceTo(playerPosition);
+      const landingDistToPlayer = landing.distanceTo(playerPosition);
+      const chaseBonus = (currentDistToPlayer - landingDistToPlayer) * this.settings.chaseWeight;
+
       // Niewielka premia za jazdę na wprost, żeby przy remisach przestrzeni
       // AI nie skręcało bez potrzeby (mniej "szarpane", bardziej naturalne
       // ruchy) - ale to tylko remisołamacz, przestrzeń zawsze wygrywa.
-      const score = space + (c.turn === null ? 2 : 0);
-      if (score > bestScore) {
-        bestScore = score;
-        bestTurn = c.turn;
-      }
+      const score = space + (c.turn === null ? 2 : 0) + chaseBonus;
+      scored.push({ turn: c.turn, score });
     }
 
-    // Żaden kierunek nie jest bezpieczny - nieunikniona śmierć, jedziemy
-    // dalej (i tak już nic nie pomoże).
-    return bestTurn;
+    if (scored.length === 0) {
+      // Żaden kierunek nie jest bezpieczny - nieunikniona śmierć, jedziemy
+      // dalej (i tak już nic nie pomoże).
+      return null;
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+
+    // mistakeChance (głównie easy): w sytuacji NIE-nagłej, zamiast zawsze
+    // brać najlepszy wynik, z pewnym prawdopodobieństwem AI bierze losowego
+    // z bezpiecznych kandydatów - stąd "łatwy" przeciwnik czasem skręca w
+    // gorszą stronę, mimo że widział lepszą opcję. W sytuacji nagłej
+    // (needsUrgentDecision) ten margines błędu jest wyłączony - inaczej AI
+    // na easy potrafiłoby świadomie wjechać w przeszkodę tuż przed sobą,
+    // co wygląda na zepsute sterowanie, nie na "łatwy poziom".
+    if (!needsUrgentDecision && this.settings.mistakeChance > 0 && Math.random() < this.settings.mistakeChance) {
+      const randomPick = scored[Math.floor(Math.random() * scored.length)];
+      return randomPick.turn;
+    }
+
+    return scored[0].turn;
   }
 
   update(deltaTime, playerPosition, playerTrail, aiTrail) {
     if (!this.visible) {
-      console.log('AI not visible, skipping update');
+      debugLog('AI not visible, skipping update');
       return;
     }
     
@@ -177,7 +224,7 @@ export class AI {
     
     // Debug co sekundę
     if (!this.lastDebug || performance.now() - this.lastDebug > 1000) {
-      console.log(
+      debugLog(
         'AI position:',
         `${this.position.x.toFixed(2)}, ${this.position.y.toFixed(2)}, ${this.position.z.toFixed(2)}`,
         'direction:', this.direction
@@ -203,11 +250,12 @@ export class AI {
     this.trail.start(this.position, this.direction);
     this._lastSmartDecision = null;
     this.show();
-    console.log('AI reset to:', this.position);
+    debugLog('AI reset to:', this.position);
   }
 
   setDifficulty(difficulty) {
-    this.difficulty = difficulty;
+    this.difficulty = DIFFICULTY_SETTINGS[difficulty] ? difficulty : 'medium';
+    this.settings = DIFFICULTY_SETTINGS[this.difficulty];
   }
 
   dispose() {

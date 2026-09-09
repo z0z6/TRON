@@ -9,6 +9,7 @@ import { Trail } from './Trail.js';
 import { PowerUpSystem } from './PowerUpSystem.js';
 import { ScoringSystem } from './ScoringSystem.js';
 import { AchievementSystem } from './AchievementSystem.js';
+import { debugLog } from './debug.js';
 
 export class Game {
   constructor(scene, camera) {
@@ -83,20 +84,20 @@ export class Game {
     this.playerTrailMesh = new Trail(this.scene, color);
     this.playerTrailMesh.start(this.player.position, this.player.direction);
     
-    console.log('Player created at:', this.player.position);
+    debugLog('Player created at:', this.player.position);
   }
 
   initOpponent(startPosition = new THREE.Vector3(15, 0, 0), color = 0xff00ff, difficulty = 'medium') {
-    console.log('Initializing opponent...');
+    debugLog('Initializing opponent...');
     this.opponent = new AI(this.scene, startPosition, color, difficulty);
-    console.log('Opponent initialized:', this.opponent);
+    debugLog('Opponent initialized:', this.opponent);
     return this.opponent;
   }
 
   // Odpowiednik initOpponent() dla trybu multiplayer - zamiast AI tworzy
   // RemotePlayer sterowanego zdarzeniami sieciowymi (patrz RemotePlayer.js).
   initRemoteOpponent(startPosition = new THREE.Vector3(15, 0, 0), color = 0xff00ff) {
-    console.log('Initializing remote opponent...');
+    debugLog('Initializing remote opponent...');
     this.opponent = new RemotePlayer(this.scene, startPosition, color);
     return this.opponent;
   }
@@ -119,7 +120,7 @@ export class Game {
   }
 
   startSinglePlayer(difficulty = 'medium') {
-    console.log('Starting single player game...');
+    debugLog('Starting single player game...');
     
     this.isMultiplayer = false;
     this._currentDifficulty = difficulty;
@@ -131,6 +132,13 @@ export class Game {
     
     if (!this.player) this.initPlayer();
     this._ensureOpponentType(false, new THREE.Vector3(15, 0, 0), 0xff00ff, difficulty);
+    // _ensureOpponentType TWORZY nowe AI tylko gdy zmienia się typ przeciwnika
+    // (human<->remote) albo gdy go jeszcze nie było - dla JUŻ ISTNIEJĄCEGO AI
+    // (typowy przypadek: opponent stworzony raz przy wejściu na ekran gry,
+    // patrz initOpponent() w main.js) parametr difficulty byłby inaczej
+    // całkowicie ignorowany aż do pierwszego restart() rundy. Wywołanie
+    // setDifficulty tutaj jawnie pokrywa oba przypadki (nowe i istniejące AI).
+    this.opponent.setDifficulty?.(difficulty);
     
     this.playerTrail.clear();
     this.opponentTrail.clear();
@@ -149,7 +157,7 @@ export class Game {
     this.gameOver = false;
     this.audioManager.playStartSound();
     
-    console.log('Game started! isStarted:', this.isStarted, 'player:', !!this.player, 'opponent:', !!this.opponent);
+    debugLog('Game started! isStarted:', this.isStarted, 'player:', !!this.player, 'opponent:', !!this.opponent);
   }
 
   // Odpowiednik startSinglePlayer() dla trybu multiplayer. Wywoływane z
@@ -159,7 +167,7 @@ export class Game {
   // handleOpponentDeath) - obie strony grają symetrycznie jako "player"
   // (lokalne sterowanie) kontra "opponent" (RemotePlayer sterowany siecią).
   startMultiplayer(isHost) {
-    console.log('Starting multiplayer game, isHost:', isHost);
+    debugLog('Starting multiplayer game, isHost:', isHost);
     
     this.isMultiplayer = true;
     this.isHost = isHost;
@@ -182,7 +190,7 @@ export class Game {
     this.gameOver = false;
     this.audioManager.playStartSound();
     
-    console.log('Multiplayer game started!');
+    debugLog('Multiplayer game started!');
   }
 
   // Najmniejsza odległość gracza od czegokolwiek, co mogłoby go zabić: granicy
@@ -214,6 +222,38 @@ export class Game {
     const cx = a.x + abx * t, cz = a.z + abz * t;
     const dx = p.x - cx, dz = p.z - cz;
     return Math.sqrt(dx * dx + dz * dz);
+  }
+
+  // Zwraca listę komórek siatki (jako obiekty {x,z}), przez które PRZESZEDŁ
+  // ruch od fromPos do toPos w tej klatce - łącznie z komórką docelową, ale
+  // bez komórki startowej (tę dodaje wywołujący osobno, patrz update()).
+  // Ruch jest zawsze osiowy (kierunek to jeden z 4 wektorów jednostkowych),
+  // więc to prosty krok po jednej osi.
+  //
+  // Dlaczego to jest ważne: przy typowej klatce (60 FPS, prędkość 10) ruch
+  // to ułamek jednej komórki, więc "od-punktu-do-punktu" i "cała trasa"
+  // dają ten sam wynik. Ale przy dłuższej klatce (zakładka w tle, GC pause)
+  // albo przy stackującym się power-upie prędkości (PowerUpSystem.js -
+  // speed *= 1.8, przy dwóch aktywnych naraz to ×3.24) cykl potrafi w
+  // jednej klatce przeskoczyć więcej niż jedną komórkę. Sprawdzanie
+  // kolizji WYŁĄCZNIE dla komórki docelowej (jak było wcześniej) pozwalało
+  // wtedy "przeskoczyć" przez ślad przeciwnika bez wykrycia kolizji - stąd
+  // ta metoda i jej użycie zarówno przy zapisie śladu, jak i w
+  // checkCollisions() poniżej.
+  _sweepCells(fromPos, toPos) {
+    const cells = [];
+    const fx = Math.floor(fromPos.x), fz = Math.floor(fromPos.z);
+    const tx = Math.floor(toPos.x), tz = Math.floor(toPos.z);
+    if (fx === tx && fz === tz) return cells;
+
+    if (fx !== tx) {
+      const step = tx > fx ? 1 : -1;
+      for (let x = fx + step; x !== tx + step; x += step) cells.push({ x, z: fz });
+    } else {
+      const step = tz > fz ? 1 : -1;
+      for (let z = fz + step; z !== tz + step; z += step) cells.push({ x: fx, z });
+    }
+    return cells;
   }
 
   handlePlayerInput(action) {
@@ -267,21 +307,54 @@ export class Game {
     return false;
   }
 
+  // Sprawdza tor od ostatniej do bieżącej pozycji (patrz _sweepCells) wobec
+  // granicy planszy i obu Setów śladu - zamiast tylko punktu końcowego.
+  // Jeśli w tej klatce nie zmieniono komórki (typowe przy 60 FPS), sweep
+  // jest pusty i sprawdzamy po prostu bieżącą pozycję jak poprzednio.
+  //
+  // ownNewCellKeys to komórki, które TA SAMA jednostka dopisała do WŁASNEGO
+  // śladu w TEJ WŁAŚNIE klatce (patrz update()) - są pomijane przy
+  // sprawdzaniu kolizji z własnym śladem (ownTrail), bo inaczej jednostka
+  // "wjeżdżałaby" we własny, dopiero co położony fragment śladu przy każdym
+  // skoku o więcej niż jedną komórkę na klatkę. Kolizja ze śladem
+  // PRZECIWNIKA (opponentTrail) liczy się zawsze, bez wyjątków.
+  _cellsHitDanger(currentPos, sweptCells, ownTrail, opponentTrail, ownNewCellKeys) {
+    const gridSize = 45;
+    const cellsToCheck = sweptCells.length > 0
+      ? sweptCells
+      : [{ x: Math.floor(currentPos.x), z: Math.floor(currentPos.z) }];
+
+    for (const cell of cellsToCheck) {
+      if (Math.abs(cell.x) > gridSize || Math.abs(cell.z) > gridSize) {
+        return { outOfBounds: true, hitTrail: false };
+      }
+      const key = `${cell.x},${cell.z}`;
+      if (opponentTrail.has(key)) {
+        return { outOfBounds: false, hitTrail: true };
+      }
+      if (ownTrail.has(key) && !(ownNewCellKeys && ownNewCellKeys.has(key))) {
+        return { outOfBounds: false, hitTrail: true };
+      }
+    }
+    return { outOfBounds: false, hitTrail: false };
+  }
+
   checkCollisions() {
     if (!this.player || !this.opponent) return;
-    
-    const playerPos = this.player.position;
-    const opponentPos = this.opponent.position;
-    
-    const gridSize = 45;
-    const playerOutOfBounds = Math.abs(playerPos.x) > gridSize || Math.abs(playerPos.z) > gridSize;
-    const opponentOutOfBounds = Math.abs(opponentPos.x) > gridSize || Math.abs(opponentPos.z) > gridSize;
-    
-    const playerKey = `${Math.floor(playerPos.x)},${Math.floor(playerPos.z)}`;
-    const playerHitTrail = this.playerTrail.has(playerKey) || this.opponentTrail.has(playerKey);
-    
-    const opponentKey = `${Math.floor(opponentPos.x)},${Math.floor(opponentPos.z)}`;
-    const opponentHitTrail = this.playerTrail.has(opponentKey) || this.opponentTrail.has(opponentKey);
+
+    const playerDanger = this._cellsHitDanger(
+      this.player.position, this._playerSweptCells || [],
+      this.playerTrail, this.opponentTrail, this._playerNewCellKeys
+    );
+    const opponentDanger = this._cellsHitDanger(
+      this.opponent.position, this._opponentSweptCells || [],
+      this.opponentTrail, this.playerTrail, this._opponentNewCellKeys
+    );
+
+    const playerOutOfBounds = playerDanger.outOfBounds;
+    const opponentOutOfBounds = opponentDanger.outOfBounds;
+    const playerHitTrail = playerDanger.hitTrail;
+    const opponentHitTrail = opponentDanger.hitTrail;
     
     // Tarcza (shield) daje pełną nietykalność. Duch (ghost) pozwala przenikać
     // przez ślady, ale NIE chroni przed wyjechaniem poza granicę planszy.
@@ -341,7 +414,7 @@ export class Game {
     
     if (this.onGameOver) this.onGameOver({ won: false });
     
-    console.log('Player died!');
+    debugLog('Player died!');
     this._scheduleAutoRestart();
   }
 
@@ -382,7 +455,7 @@ export class Game {
     
     if (this.onGameOver) this.onGameOver({ won: true });
     
-    console.log('Opponent died! You win!');
+    debugLog('Opponent died! You win!');
     this._scheduleAutoRestart();
   }
 
@@ -425,11 +498,33 @@ export class Game {
       // dopiero przy teście w prawdziwej przeglądarce (headless Chrome) - żaden
       // z wcześniejszych testów jednostkowych/build tego nie wyłapał, bo bug
       // ujawnia się wyłącznie przy realnym uruchomieniu pętli gry.
-      const playerKey = `${Math.floor(this.player.position.x)},${Math.floor(this.player.position.z)}`;
       const lastPlayerKey = `${Math.floor(lastPlayerPos.x)},${Math.floor(lastPlayerPos.z)}`;
-      if (playerKey !== lastPlayerKey) {
+      // Wszystkie komórki przecięte w tej klatce (patrz komentarz przy
+      // _sweepCells) - ostatnia w tej liście to komórka, w której cykl
+      // ZNAJDUJE SIĘ TERAZ, więc do śladu trafiają tylko te PRZED nią, plus
+      // lastPlayerKey (komórka opuszczona na starcie klatki) - dokładnie
+      // ta sama zasada co poprzednio ("dopisujemy komórkę, którą gracz
+      // WŁAŚNIE OPUŚCIŁ"), tylko rozszerzona na cały przebyty odcinek.
+      //
+      // _playerNewCellKeys zapamiętuje DOKŁADNIE te klucze dopisane w TEJ
+      // klatce - checkCollisions() poniżej musi je pominąć przy sprawdzaniu
+      // kolizji z WŁASNYM śladem (ale nie ze śladem przeciwnika!). Bez tego
+      // wracałby dokładnie ten sam bug, co w komentarzu wyżej: przy skoku o
+      // więcej niż jedną komórkę w jednej klatce (lag spike, stack power-upów
+      // prędkości) cykl "widziałby" własny, dopiero co położony fragment
+      // śladu jako przeszkodę i ginąłby natychmiast.
+      const playerSweep = this._sweepCells(lastPlayerPos, this.player.position);
+      this._playerNewCellKeys = new Set();
+      if (playerSweep.length > 0) {
         this.playerTrail.add(lastPlayerKey);
+        this._playerNewCellKeys.add(lastPlayerKey);
+        for (let i = 0; i < playerSweep.length - 1; i++) {
+          const key = `${playerSweep[i].x},${playerSweep[i].z}`;
+          this.playerTrail.add(key);
+          this._playerNewCellKeys.add(key);
+        }
       }
+      this._playerSweptCells = playerSweep; // użyte w checkCollisions() poniżej
       
       // Aktualizuj AI
       const lastOpponentPos = this.opponent.position.clone();
@@ -451,12 +546,20 @@ export class Game {
         this.audioManager.playGearShift('opponent');
       }
 
-      // Ten sam wzorzec (i ten sam bug przed naprawą) co dla gracza wyżej.
-      const opponentKey = `${Math.floor(this.opponent.position.x)},${Math.floor(this.opponent.position.z)}`;
+      // Ten sam wzorzec (i to samo zabezpieczenie _opponentNewCellKeys) co dla gracza wyżej.
       const lastOpponentKey = `${Math.floor(lastOpponentPos.x)},${Math.floor(lastOpponentPos.z)}`;
-      if (opponentKey !== lastOpponentKey) {
+      const opponentSweep = this._sweepCells(lastOpponentPos, this.opponent.position);
+      this._opponentNewCellKeys = new Set();
+      if (opponentSweep.length > 0) {
         this.opponentTrail.add(lastOpponentKey);
+        this._opponentNewCellKeys.add(lastOpponentKey);
+        for (let i = 0; i < opponentSweep.length - 1; i++) {
+          const key = `${opponentSweep[i].x},${opponentSweep[i].z}`;
+          this.opponentTrail.add(key);
+          this._opponentNewCellKeys.add(key);
+        }
       }
+      this._opponentSweptCells = opponentSweep; // użyte w checkCollisions() poniżej
 
       this.audioManager.updateEngineSound('player', this.player.speed);
       this.audioManager.updateEngineSound('opponent', this.opponent.speed);
@@ -556,7 +659,7 @@ export class Game {
     this.audioManager.startEngineSound('player');
     this.audioManager.startEngineSound('opponent');
     
-    console.log('Game restarted and round started!');
+    debugLog('Game restarted and round started!');
   }
 
   toggleCameraMode() {

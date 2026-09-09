@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { debugLog } from './debug.js';
 
 export class MultiplayerManager {
   constructor() {
@@ -26,13 +27,13 @@ export class MultiplayerManager {
       this.socket.on('connect', () => {
         this.isConnected = true;
         this.playerId = this.socket.id;
-        console.log('Connected to server:', this.playerId);
+        debugLog('Connected to server:', this.playerId);
         resolve();
       });
       
       this.socket.on('disconnect', () => {
         this.isConnected = false;
-        console.log('Disconnected from server');
+        debugLog('Disconnected from server');
       });
       
       this.socket.on('player-joined', (data) => {
@@ -86,7 +87,7 @@ export class MultiplayerManager {
       this.socket.emit('create-room', {}, (response) => {
         this.roomId = response.roomId;
         this.isHost = true;
-        console.log('Room created:', this.roomId);
+        debugLog('Room created:', this.roomId);
         resolve(response);
       });
     });
@@ -99,7 +100,7 @@ export class MultiplayerManager {
         if (response.success) {
           this.roomId = roomId;
           this.isHost = false;
-          console.log('Joined room:', this.roomId);
+          debugLog('Joined room:', this.roomId);
           resolve(response);
         } else {
           reject(new Error(response.error));
