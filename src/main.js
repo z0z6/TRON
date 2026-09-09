@@ -52,6 +52,14 @@ camera.lookAt(0, 8, 0);
 const renderer = new THREE.WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' });
 renderer.setSize(initialSize.width, initialSize.height);
 renderer.setPixelRatio(quality.pixelRatioCap);
+// Filmowy tone mapping - bez tego jasne, addytywnie mieszane neony (ślady,
+// bloom) po prostu "obcinają się" do czystej bieli zamiast miękko
+// wysycać się przy górnej granicy jasności. OutputPass (dodany niżej do
+// composera) sam odczytuje to ustawienie z renderera, więc nic więcej nie
+// trzeba zmieniać. Exposure lekko > 1, żeby scena nie ściemniała względem
+// tego, jak wyglądała bez tone mappingu.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
 // Renderuje do #gameCanvasWrap (zwężonego o marginesy na sterowanie dotykowe
 // - patrz orientation-lock w index.html), a nie bezpośrednio do <body>, żeby
 // motocykl nigdy nie jeździł "pod" D-Padem/klawiszami funkcyjnymi.

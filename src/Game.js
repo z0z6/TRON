@@ -12,6 +12,13 @@ import { AchievementSystem } from './AchievementSystem.js';
 import { debugLog } from './debug.js';
 import { sweepCells, cellsHitDanger, minDistanceToDanger } from './collision.js';
 
+// Prędkość gracza bez żadnych power-upów - punkt odniesienia dla FOV kicka
+// w CameraController (speedRatio = this.player.speed / BASE_PLAYER_SPEED).
+// Wydzielona jako stała, żeby initPlayer() i reset prędkości w restart()
+// (który kasuje efekty power-upów kończące rundę) nie mogły się rozjechać
+// z tą wartością.
+const BASE_PLAYER_SPEED = 10;
+
 export class Game {
   constructor(scene, camera) {
     this.scene = scene;
@@ -65,7 +72,7 @@ export class Game {
       mesh: createLightCycleMesh(color),
       position: startPosition.clone(),
       direction: new THREE.Vector3(1, 0, 0),
-      speed: 10,
+      speed: BASE_PLAYER_SPEED,
       visible: true,
       hasShield: false,
       isGhost: false,
@@ -143,6 +150,7 @@ export class Game {
     
     this.playerTrail.clear();
     this.opponentTrail.clear();
+    this.cameraController.resetFov();
     
     // Reset systemów na nową rundę. UWAGA: restart() (patrz niżej) ma
     // WŁASNĄ, analogiczną kopię tej logiki zamiast wywoływać tę metodę -
@@ -180,6 +188,7 @@ export class Game {
     
     this.playerTrail.clear();
     this.opponentTrail.clear();
+    this.cameraController.resetFov();
     
     this.scoringSystem.reset();
     this.powerUpSystem.clear();
@@ -526,6 +535,7 @@ export class Game {
       this.audioManager.setVoiceDistanceGain('opponent', 0.08 + proximity * 0.92);
 
       this.cameraController.follow(this.player.mesh, deltaTime);
+      this.cameraController.updateFov(this.player.speed / BASE_PLAYER_SPEED, deltaTime);
       
       // --- Power-upy ---
       const currentTimeMs = performance.now();
@@ -573,11 +583,12 @@ export class Game {
     this.playerTrail.clear();
     this.opponentTrail.clear();
     this.powerUpSystem.clear();
+    this.cameraController.resetFov();
     
     if (this.player) {
       this.player.position.set(-15, 0, 0);
       this.player.direction.set(1, 0, 0);
-      this.player.speed = 10;
+      this.player.speed = BASE_PLAYER_SPEED;
       this.player.visible = true;
       this.player.mesh.visible = true;
       this.player.mesh.position.copy(this.player.position);

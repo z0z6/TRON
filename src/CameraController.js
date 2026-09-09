@@ -9,6 +9,19 @@ export class CameraController {
     
     this.smoothSpeed = 5.0;
     this.currentMode = 'follow'; // 'follow', 'topDown', 'firstPerson'
+
+    // --- FOV kick (sensacja prędkości przy power-upie speed) ---
+    // baseFov to punkt odniesienia, do którego wraca kamera, gdy prędkość
+    // znowu jest normalna (speedRatio === 1) - zapamiętany raz, przy
+    // starcie, żeby zadziałało niezależnie od tego, jaki FOV ktoś ustawił
+    // w main.js. maxFovKickDeg to górna granica poszerzenia (przy
+    // speedRatio 1.8 z PowerUpSystem.js efekt jest wyraźny, ale nie
+    // karykaturalny). fovSmoothSpeed kontroluje jak szybko FOV "dogania"
+    // cel - osobno od smoothSpeed pozycji kamery, żeby dało się je stroić
+    // niezależnie.
+    this.baseFov = camera.fov;
+    this.maxFovKickDeg = 12;
+    this.fovSmoothSpeed = 6.0;
     
     // Tryby kamery. Offsety podane w LOKALNEJ przestrzeni motocykla (Z ujemne = za pojazdem,
     // Z dodatnie = przed pojazdem) - w follow() są obracane o aktualny kąt jazdy (rotation.y),
@@ -79,6 +92,31 @@ export class CameraController {
     const currentIndex = modes.indexOf(this.currentMode);
     const nextIndex = (currentIndex + 1) % modes.length;
     this.setMode(modes[nextIndex]);
+  }
+
+  // "FOV kick" - poszerza pole widzenia proporcjonalnie do tego, o ile
+  // gracz jedzie szybciej niż normalnie (speedRatio = aktualna prędkość /
+  // bazowa prędkość, patrz wywołanie w Game.js update()). speedRatio 1.0
+  // (brak boosta) sprowadza FOV z powrotem do baseFov. Płynne dochodzenie
+  // do celu (zamiast skoku) tym samym wzorcem co follow() dla pozycji
+  // kamery - inny współczynnik wygładzania (fovSmoothSpeed), bo FOV chcemy
+  // zmieniać wyraźnie szybciej niż pozycję, żeby czuć boost "od razu".
+  updateFov(speedRatio, deltaTime) {
+    const kick = THREE.MathUtils.clamp((speedRatio - 1) * this.maxFovKickDeg, 0, this.maxFovKickDeg);
+    const targetFov = this.baseFov + kick;
+    const t = Math.min(1, this.fovSmoothSpeed * deltaTime);
+    this.camera.fov += (targetFov - this.camera.fov) * t;
+    this.camera.updateProjectionMatrix();
+  }
+
+  // Reset natychmiastowy (bez wygładzania) - wywoływane na starcie nowej
+  // rundy. Bez tego, jeśli poprzednia runda skończyła się śmiercią W
+  // TRAKCIE boosta prędkości, FOV zostawałby "zamrożony" szeroki między
+  // rundami (update() w Game.js, a więc i updateFov(), nie jest wołane,
+  // gdy gameOver === true - patrz warunek na początku Game.update()).
+  resetFov() {
+    this.camera.fov = this.baseFov;
+    this.camera.updateProjectionMatrix();
   }
 
   // Camera shake (wywoływane z zewnątrz)

@@ -35,7 +35,34 @@ korzenia repo `TRON/`, więc wystarczy je nadpisać/dodać один po drugim.
   `@eslint/js`, `globals`, `prettier`) i skrypty `test`, `test:watch`,
   `lint`, `format`.
 
-## Jak przetestować po podmianie
+## Runda 2 — poprawki graficzne (nowe/zmienione w tej paczce)
+- `src/main.js` — `renderer.toneMapping = THREE.ACESFilmicToneMapping` +
+  `toneMappingExposure = 1.1`. Jasne, addytywnie mieszane neony (ślady,
+  bloom) teraz miękko wysycają się przy górnej granicy jasności zamiast
+  się urywać do czystej bieli. `OutputPass`, już obecny w composerze,
+  sam odczytuje to ustawienie z renderera — nic więcej nie trzeba było
+  zmieniać.
+- `src/Effects.js` — cząsteczki `DerezzEffect` mają teraz miękką,
+  radialno-gradientową teksturę (`getParticleSpriteTexture()`, canvas
+  generowany raz i współdzielony między wybuchami) zamiast domyślnych,
+  twardych kwadratów z gołego `PointsMaterial`.
+- `src/CameraController.js` — nowe `updateFov(speedRatio, deltaTime)`
+  (płynnie poszerza FOV przy boostcie prędkości) i `resetFov()` (twardy
+  reset na starcie rundy, żeby FOV nie "zamroziło się" szerokie po
+  śmierci w trakcie boosta).
+- `src/Game.js` — stała `BASE_PLAYER_SPEED = 10` (zamiast powielonych
+  literałów `10`), wywołanie `cameraController.updateFov(...)` co klatkę
+  obok `follow()`, oraz `cameraController.resetFov()` w
+  `startSinglePlayer()`, `startMultiplayer()` i `restart()`.
+- `src/tests/cameraFov.test.js` — 7 nowych testów Vitest na logikę FOV
+  kicka (brak zmiany przy speedRatio=1, płynne dochodzenie do celu,
+  clamp przy bardzo wysokim ratio, powrót do bazy, `resetFov()`
+  natychmiastowy vs `updateFov()` wygładzany).
+
+Łącznie testów w paczce: **29** (17 collision + 5 trail + 7 fov),
+wszystkie zielone; `npm run lint` bez błędów; `npm run build` przechodzi.
+
+
 
 ```bash
 cd src

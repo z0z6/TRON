@@ -1,5 +1,38 @@
 import * as THREE from 'three';
 
+// Sprite dla cząsteczek DerezzEffect - bez tekstury PointsMaterial renderuje
+// każdą cząsteczkę jako twardy, płaski kwadrat, co przy neonowej estetyce
+// gry wygląda jak konfetti zamiast "rozsypującego się światła". Miękki,
+// radialny gradient (jasny środek gasnący do przezroczystości na brzegu)
+// naprawia to bez dotykania reszty logiki cząsteczek (pozycje/prędkości/
+// opacity-nad-czasem zostają identyczne jak wcześniej).
+//
+// Tekstura jest tworzona RAZ i współdzielona między wszystkimi wybuchami
+// (Trail/derezz może się zdarzyć wiele razy w rundzie) - to bezpieczne,
+// bo material.dispose() w update()/clear() poniżej NIE dispose'uje tekstur
+// przypisanych do materiału (three.js robi to tylko dla samego materiału),
+// więc współdzielony obiekt przeżywa dispose kolejnych PointsMaterial.
+let sharedParticleSpriteTexture = null;
+function getParticleSpriteTexture() {
+  if (sharedParticleSpriteTexture) return sharedParticleSpriteTexture;
+
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.4, 'rgba(255,255,255,0.55)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+
+  sharedParticleSpriteTexture = new THREE.CanvasTexture(canvas);
+  return sharedParticleSpriteTexture;
+}
+
 export class DerezzEffect {
   constructor(scene) {
     this.scene = scene;
@@ -42,7 +75,9 @@ export class DerezzEffect {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     
     const material = new THREE.PointsMaterial({
-      size: 0.3,
+      size: 0.35,
+      map: getParticleSpriteTexture(),
+      alphaTest: 0.01,
       vertexColors: true,
       transparent: true,
       opacity: 1,
