@@ -223,17 +223,15 @@ function buildClassicBackground(density = 1) {
       const worldX = px + Math.cos(rotY) * localX - Math.sin(rotY) * localZ;
       const worldZ = pz + Math.sin(rotY) * localX + Math.cos(rotY) * localZ;
       // Zakres pionowy diody: zaczyna się NIECO PONIŻEJ poziomu areny
-      // (lowY=-2, arena to y=0) - wcześniej diody startowały dopiero nad
-      // areną (FLOOR_Y+1.4), przez co dolna partia budynku była całkiem
-      // pusta. Rozkład dalej CELOWO nierównomierny - wykładnik <1 na
-      // rand() spycha większość wylosowanych wartości w górę zakresu
-      // (jeszcze mocniej niż wcześniej: 0.4, nie 0.5), więc diody gęstnieją
-      // przede wszystkim w górnej partii ściany (jak światła w wyższych
-      // piętrach wieżowca), rzednąc w dół, aż do niemal zera tuż nad tym
-      // dolnym limitem.
+      // (lowY=-2, arena to y=0). Rozkład dalej CELOWO nierównomierny -
+      // wykładnik <1 na rand() spycha wylosowane wartości w górę zakresu,
+      // więc diody wciąż GĘSTNIEJĄ ku górze ściany (jak światła w wyższych
+      // piętrach wieżowca) - ale mniej drastycznie niż poprzednio (0.6, nie
+      // 0.4): dolna partia budynku, bliżej areny, ma teraz WYRAŹNIE więcej
+      // świateł niż wcześniej, zamiast być niemal pusta.
       const lowY = -2;
       const topY = FLOOR_Y + height;
-      const heightFrac = Math.pow(rand(), 0.4);
+      const heightFrac = Math.pow(rand(), 0.6);
       const worldY = lowY + heightFrac * (topY - lowY);
 
       // Panel diody leży płasko na ścianie: jego "szeroka" oś biegnie
@@ -362,7 +360,7 @@ function buildClassicBackground(density = 1) {
       // budynek) - w połączeniu z mocniejszym wykładnikiem rozkładu (0.4)
       // większość z nich ląduje w górnej partii, gdzie już było ich najwięcej.
       const diodeDensityMul = 0.6 + 0.4 * density;
-      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((22 + Math.floor(rand() * 34)) * diodeDensityMul)));
+      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((30 + Math.floor(rand() * 42)) * diodeDensityMul)));
 
       // Więcej szczebli niż poprzednio (5-12 zamiast 3-8) - patrz
       // addBuildingRungs powyżej. W PEŁNI skalowane przez density - to
@@ -656,10 +654,35 @@ function buildSynthwaveBackground() {
   function buildRidge(radius, baseHeight, color, segments) {
     const points = [];
     const step = (Math.PI * 2) / segments;
+    // Fazy losowane PER GRZBIET (nie wspólne dla wszystkich pięciu) - dzięki
+    // temu każdy grzbiet ma WŁASNY, inny wzorzec tego, gdzie jest gładko, a
+    // gdzie postrzępiono, zamiast identycznie powtarzającego się układu.
+    const shapePhase = rand() * Math.PI * 2;
+    const roughPhase = rand() * Math.PI * 2;
     for (let i = 0; i <= segments; i++) {
       const angle = i * step;
-      const h = baseHeight * (0.4 + rand() * 0.6);
       const { x: rx, z: rz } = ellipsePoint(angle, radius);
+
+      // Gładka, niskoczęstotliwościowa "obwiednia" (1-2 fale na pełny
+      // obrót) - odpowiada za WIĘKSZE, łagodne różnice wysokości między
+      // odcinkami grzbietu (część grzbietu wyraźnie niższa, część wyższa),
+      // niezależnie od lokalnego postrzępienia dodawanego niżej. Zakres
+      // 0.45-1.0.
+      const envelope = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(angle * 1.4 + shapePhase));
+
+      // Osobna fala o INNEJ częstotliwości/fazie steruje TYM, jak bardzo
+      // widoczny jest lokalny szum w danym miejscu (roughAmount, 0-1) -
+      // blisko 0 daje gładki, zaokrąglony odcinek zbocza, blisko 1 mocno
+      // postrzępiony, skalisty odcinek. Naprzemienne strefy gładkie/
+      // postrzępione wzdłuż JEDNEGO grzbietu - efekt wyżynno-skalistego
+      // terenu zamiast jednostajnie "piłokształtnych" gór.
+      const roughAmount = 0.5 + 0.5 * Math.sin(angle * 3.1 + roughPhase);
+      const jagged = (rand() * 2 - 1) * roughAmount * 0.5;
+
+      // Suma obwiedni i lokalnego szumu, z dolnym ograniczeniem (0.12), żeby
+      // nawet w najbardziej "zapadniętym" miejscu grzbiet nie zjechał do
+      // zera/ujemnej wysokości.
+      const h = baseHeight * Math.max(0.12, envelope + jagged);
       points.push(new THREE.Vector3(rx, h, rz));
     }
 
@@ -749,12 +772,16 @@ function buildSynthwaveBackground() {
 
   // Pięć grzbietów zamiast trzech - gęściej upakowane pasmo gór, więcej
   // sylwetek nakładających się na siebie przy różnych promieniach/
-  // wysokościach (więcej "brył" low-poly, większa głębia).
-  disposeAwareAdd(group, buildRidge(260, 40, 0x00eaff, 26));
-  disposeAwareAdd(group, buildRidge(320, 55, 0xff2f9e, 26));
-  disposeAwareAdd(group, buildRidge(400, 75, 0x00eaff, 30));
-  disposeAwareAdd(group, buildRidge(480, 100, 0xff2f9e, 26));
-  disposeAwareAdd(group, buildRidge(560, 125, 0x00eaff, 24));
+  // wysokościach (więcej "brył" low-poly, większa głębia). Niższe niż
+  // wcześniej (baseHeight obniżone ~25-30%) i z większą liczbą segmentów
+  // (więcej punktów = więcej miejsca na widoczne postrzępienie w strefach,
+  // gdzie roughAmount w buildRidge() akurat jest wysoki - patrz komentarz
+  // tam).
+  disposeAwareAdd(group, buildRidge(260, 28, 0x00eaff, 34));
+  disposeAwareAdd(group, buildRidge(320, 38, 0xff2f9e, 34));
+  disposeAwareAdd(group, buildRidge(400, 52, 0x00eaff, 40));
+  disposeAwareAdd(group, buildRidge(480, 70, 0xff2f9e, 34));
+  disposeAwareAdd(group, buildRidge(560, 88, 0x00eaff, 32));
 
   disposeAwareAdd(group, buildStarfield(rand, 220, 0xffffff, 80, 400, 60, 220));
 
@@ -790,7 +817,7 @@ function buildMatrixCharacterTexture(rand, charSize = 26) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = `${charSize}px monospace`;
+  ctx.font = `bold ${charSize}px monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
@@ -798,7 +825,7 @@ function buildMatrixCharacterTexture(rand, charSize = 26) {
     const ch = chars[Math.floor(rand() * chars.length)];
     const bright = rand();
     ctx.fillStyle = bright < 0.15 ? '#eaffea' : '#3dff6e';
-    ctx.globalAlpha = 0.5 + rand() * 0.5;
+    ctx.globalAlpha = 0.72 + rand() * 0.28;
     ctx.fillText(ch, canvas.width / 2, y);
   }
   const texture = new THREE.CanvasTexture(canvas);
@@ -813,6 +840,12 @@ function buildMatrixCharacterTexture(rand, charSize = 26) {
 function buildMatrixBackground(density = 1) {
   const rand = makeRand(7331);
   const group = new THREE.Group();
+  // Spowalnia CAŁY deszcz (mnożnik na finalną prędkość każdego strumienia,
+  // patrz "speed" w addLayer niżej) - 0.6 = 60% poprzedniej prędkości.
+  // Jeden wspólny mnożnik zamiast osobnego przycinania speedMin/speedMax w
+  // każdym z trzech wywołań addLayer niżej, żeby względne różnice prędkości
+  // między warstwami (bliska/środkowa/daleka) zostały zachowane.
+  const MATRIX_SPEED_MUL = 0.6;
   const baseTexture = buildMatrixCharacterTexture(rand, 26);
   // Wariant "dużych" strumieni - większe znaki (46px zamiast 26px), losowana
   // NIEZALEŻNIE dla części strumieni w każdej warstwie (patrz isBig w
@@ -820,6 +853,11 @@ function buildMatrixBackground(density = 1) {
   // kilku "ociężałych", grubszych sznurów znaków przebijających się przez
   // resztę, standardowej gęstości/prędkości deszczu.
   const bigTexture = buildMatrixCharacterTexture(rand, 46);
+  // Wariant "małych" strumieni - mniejsze znaki (17px), na kontrast z
+  // "dużymi" wyżej: razem dają wyraźniejsze wrażenie różnicy odległości od
+  // widza (duże/bliskie vs małe/dalekie), niezależnie od samego promienia
+  // warstwy (patrz isBig/isSmall w addLayer niżej).
+  const smallTexture = buildMatrixCharacterTexture(rand, 17);
   const columns = [];
 
   // Jedna warstwa strumieni (wywoływana dwa razy - bliżej/dalej, patrz
@@ -836,21 +874,27 @@ function buildMatrixBackground(density = 1) {
       // jej poziomu.
       const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 200, 350);
 
-      // ~1 na 5 strumieni - duże znaki, wyraźnie wolniejszy spadek (35-50%
-      // normalnej prędkości) i odrobinę szerszy pas (żeby duże glify miały
-      // gdzie "oddychać", nie ocierały się o sąsiednią kolumnę).
-      const isBig = rand() < 0.2;
-      const texture = (isBig ? bigTexture : baseTexture).clone();
+      // Trójwariantowy rozmiar (zamiast tylko duże/normalne): ~18% strumieni
+      // wyraźnie WIĘKSZYCH (czyt. bliższych widzowi - duże, szerokie glify,
+      // mocno spowolnione), ~18% wyraźnie MNIEJSZYCH (czyt. dalszych -
+      // drobne, wąskie, przygaszone), reszta normalna. Razem z trzema
+      // warstwami promienia (bliska/środkowa/daleka, patrz wywołania
+      // addLayer niżej) daje to znacznie większe zróżnicowanie pozornej
+      // odległości niż sama tylko odległość warstwy.
+      const sizeRoll = rand();
+      const isBig = sizeRoll < 0.18;
+      const isSmall = !isBig && sizeRoll > 0.82;
+      const texture = (isBig ? bigTexture : (isSmall ? smallTexture : baseTexture)).clone();
       texture.needsUpdate = true;
       texture.repeat.set(1, totalHeight / 14);
       texture.offset.y = rand();
 
       const material = new THREE.MeshBasicMaterial({
-        map: texture, transparent: true, opacity,
+        map: texture, transparent: true, opacity: isSmall ? opacity * 0.75 : opacity,
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide
       });
       applyHorizonFade(material);
-      const width = (widthMin + rand() * (widthMax - widthMin)) * (isBig ? 1.3 : 1);
+      const width = (widthMin + rand() * (widthMax - widthMin)) * (isBig ? 1.6 : (isSmall ? 0.65 : 1));
       const geometry = new THREE.PlaneGeometry(width, totalHeight);
 
       const cross = new THREE.Group();
@@ -863,8 +907,8 @@ function buildMatrixBackground(density = 1) {
       disposeAwareAdd(group, cross);
 
       const speed = isBig
-        ? speedMin * 0.35 + rand() * (speedMax - speedMin) * 0.35
-        : speedMin + rand() * (speedMax - speedMin);
+        ? (speedMin * 0.35 + rand() * (speedMax - speedMin) * 0.35) * MATRIX_SPEED_MUL
+        : (speedMin + rand() * (speedMax - speedMin)) * (isSmall ? 1.15 : 1) * MATRIX_SPEED_MUL;
       const cycleDuration = 5 + rand() * 12;
       columns.push({
         texture, material,

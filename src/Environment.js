@@ -54,7 +54,13 @@ export class SynthwaveEnvironment {
     // więcej.
     const geometry = new THREE.PlaneGeometry(90, 90);
     this.floorBase = new Reflector(geometry, {
-      color: 0x2c2c5e,
+      // Jaśniejszy tint niż poprzednio (było 0x2c2c5e) - Reflector.js miesza
+      // odbitą scenę z tym kolorem przez overlay blend (jak w Photoshopie):
+      // ciemny tint przyćmiewał/brudził odbicie, jaśniejszy pozwala
+      // faktycznym, neonowym kolorom sceny przebić się wyraźniej przez
+      // lustro - to właśnie czyta się jako "bardziej wypolerowana, lśniąca"
+      // powierzchnia, nie dodatkowy blur ani inny materiał.
+      color: 0x6a6a90,
       textureWidth: 2048,
       textureHeight: 2048,
       clipBias: 0.003
