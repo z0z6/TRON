@@ -231,7 +231,7 @@ function buildClassicBackground(density = 1) {
       // świateł niż wcześniej, zamiast być niemal pusta.
       const lowY = -2;
       const topY = FLOOR_Y + height;
-      const heightFrac = Math.pow(rand(), 0.6);
+      const heightFrac = Math.pow(rand(), 0.8);
       const worldY = lowY + heightFrac * (topY - lowY);
 
       // Panel diody leży płasko na ścianie: jego "szeroka" oś biegnie
@@ -360,7 +360,7 @@ function buildClassicBackground(density = 1) {
       // budynek) - w połączeniu z mocniejszym wykładnikiem rozkładu (0.4)
       // większość z nich ląduje w górnej partii, gdzie już było ich najwięcej.
       const diodeDensityMul = 0.6 + 0.4 * density;
-      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((30 + Math.floor(rand() * 42)) * diodeDensityMul)));
+      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((38 + Math.floor(rand() * 46)) * diodeDensityMul)));
 
       // Więcej szczebli niż poprzednio (5-12 zamiast 3-8) - patrz
       // addBuildingRungs powyżej. W PEŁNI skalowane przez density - to
@@ -570,11 +570,27 @@ function buildSunTexture(rand, { core, mid, stripes }) {
   ctx.fill();
 
   if (stripes) {
-    ctx.fillStyle = 'rgba(8,3,18,0.92)';
-    for (let i = 0; i < 6; i++) {
-      const y = size * (0.28 + rand() * 0.52);
-      ctx.fillRect(0, y, size, 4 + rand() * 7);
+    // Kolorowe pasy (żółty -> pomarańczowy -> fioletowy) skupione w DOLNEJ
+    // części tarczy słońca - klasyczny "retro sunset" wygląd. Poprzednia
+    // wersja rysowała losowe, CIEMNE (maskujące) paski rozrzucone po całej
+    // tarczy; to nie dawało efektu kolorowych warstw, tylko dziury w
+    // gradiencie. Teraz paski schodzą w dół od połowy tarczy, z lukami
+    // między nimi (przez które prześwituje gradient tła), więc czytają się
+    // jako odrębne, kolorowe warstwy, nie jedna plama.
+    const stripeColors = ['#ffe066', '#ffb144', '#ff8a3d', '#ff6a4a', '#b34bff'];
+    let y = size * 0.52;
+    const bottomLimit = size * 0.98;
+    let i = 0;
+    while (y < bottomLimit) {
+      const thickness = 3 + rand() * 9;
+      const gap = 2 + rand() * 7;
+      ctx.fillStyle = stripeColors[i % stripeColors.length];
+      ctx.globalAlpha = 0.78 + rand() * 0.2;
+      ctx.fillRect(0, y, size, thickness);
+      y += thickness + gap;
+      i++;
     }
+    ctx.globalAlpha = 1;
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -641,10 +657,30 @@ function buildSynthwaveBackground() {
   // WŁASNĄ fazą, więc i tak nie migają w unisono.
   const ridgeSparkles = [];
 
+  // Słońce siedzi w (x=0, z=-260) - patrz buildSunWithReflection wyżej. W
+  // układzie kąta używanym przez ellipsePoint (x=cos*r*ELLIPSE_X,
+  // z=sin*r*ELLIPSE_Z) odpowiada to kątowi 3π/2 (cos=0, sin=-1). Ta STAŁA
+  // (nie losowana per grzbiet, w przeciwieństwie do shapePhase/roughPhase
+  // niżej) jest współdzielona przez WSZYSTKIE pięć grzbietów, żeby ich
+  // "doliny" przy słońcu pokryły się w jedną, spójną wyrwę odsłaniającą
+  // niebo, a nie pięć osobnych, przypadkowo poprzesuwanych obniżeń.
+  const SUN_ANGLE = Math.PI * 1.5;
+  const SUN_GAP_HALF_WIDTH = 1.05; // ~60° w każdą stronę - szeroka, wyraźna wyrwa, nie wąska szczelina
+  function sunGapFactor(angle) {
+    let d = Math.abs(angle - SUN_ANGLE) % (Math.PI * 2);
+    if (d > Math.PI) d = Math.PI * 2 - d;
+    const t = Math.min(1, d / SUN_GAP_HALF_WIDTH);
+    const smooth = t * t * (3 - 2 * t); // smoothstep - płynne, nie kanciaste wejście/wyjście z doliny
+    return 0.22 + 0.78 * smooth; // 0.22 dokładnie przy słońcu (mocno, ale nie do zera - dalej "teren"), 1.0 daleko od niego
+  }
+
   // Jedno, wyraźne, ale niedominujące słońce (umiarkowana opacity zamiast
   // 0.85) - z odbiciem na podłodze (patrz buildSunWithReflection wyżej).
+  // Ciepła paleta (żółć/pomarańcz), nie zimny róż jak poprzednio - razem z
+  // kolorowymi paskami u dołu tarczy (patrz buildSunTexture) daje klasyczny
+  // "zachód słońca", nie neonową plamę.
   disposeAwareAdd(group, buildSunWithReflection(rand, {
-    core: '#fff0f8', mid: '#ff5fa8', stripes: true, radius: 60, skyY: 50, opacity: 0.55
+    core: '#fff6d5', mid: '#ff8a3d', stripes: true, radius: 60, skyY: 50, opacity: 0.6
   }));
 
   // Góry - kontur (LineSegments, nie wypełnione trójkąty), żeby wyglądały
@@ -661,28 +697,33 @@ function buildSynthwaveBackground() {
     const roughPhase = rand() * Math.PI * 2;
     for (let i = 0; i <= segments; i++) {
       const angle = i * step;
+
       const { x: rx, z: rz } = ellipsePoint(angle, radius);
 
-      // Gładka, niskoczęstotliwościowa "obwiednia" (1-2 fale na pełny
-      // obrót) - odpowiada za WIĘKSZE, łagodne różnice wysokości między
-      // odcinkami grzbietu (część grzbietu wyraźnie niższa, część wyższa),
-      // niezależnie od lokalnego postrzępienia dodawanego niżej. Zakres
-      // 0.45-1.0.
-      const envelope = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(angle * 1.4 + shapePhase));
+      // Gładka obwiednia złożona z DWÓCH fal o różnej częstotliwości -
+      // zamiast jednej, dużej "górki" na cały grzbiet, daje kilka bliżej
+      // siebie leżących par wzniesienie/obniżenie (pagórek, a kawałek dalej
+      // już dolina) - bardziej wyżynny, poszarpany profil, mniej
+      // jednostajnie "falisty".
+      const envelope = 0.4
+        + 0.35 * (0.5 + 0.5 * Math.sin(angle * 2.3 + shapePhase))
+        + 0.25 * (0.5 + 0.5 * Math.sin(angle * 3.7 + shapePhase * 1.7));
 
-      // Osobna fala o INNEJ częstotliwości/fazie steruje TYM, jak bardzo
-      // widoczny jest lokalny szum w danym miejscu (roughAmount, 0-1) -
-      // blisko 0 daje gładki, zaokrąglony odcinek zbocza, blisko 1 mocno
-      // postrzępiony, skalisty odcinek. Naprzemienne strefy gładkie/
-      // postrzępione wzdłuż JEDNEGO grzbietu - efekt wyżynno-skalistego
-      // terenu zamiast jednostajnie "piłokształtnych" gór.
+      // Osobna, innoczęstotliwościowa fala steruje TYM, jak bardzo lokalny
+      // szum (jagged) jest widoczny w danym miejscu - blisko 0 daje gładki,
+      // zaokrąglony odcinek zbocza, blisko 1 mocno postrzępiony, skalisty
+      // odcinek. Naprzemienne strefy gładkie/postrzępione wzdłuż JEDNEGO
+      // grzbietu - efekt wyżynno-skalistego terenu zamiast jednostajnie
+      // "piłokształtnych" gór.
       const roughAmount = 0.5 + 0.5 * Math.sin(angle * 3.1 + roughPhase);
       const jagged = (rand() * 2 - 1) * roughAmount * 0.5;
 
-      // Suma obwiedni i lokalnego szumu, z dolnym ograniczeniem (0.12), żeby
-      // nawet w najbardziej "zapadniętym" miejscu grzbiet nie zjechał do
-      // zera/ujemnej wysokości.
-      const h = baseHeight * Math.max(0.12, envelope + jagged);
+      // Suma obwiedni i lokalnego szumu (dolny limit 0.12, żeby nawet w
+      // najbardziej "zapadniętym" miejscu grzbiet nie zjechał do zera),
+      // dodatkowo przemnożona przez sunGapFactor - to właśnie ono wyraźnie
+      // obniża WSZYSTKIE grzbiety w kierunku słońca i w jego pobliżu,
+      // odsłaniając niebo za nimi.
+      const h = baseHeight * Math.max(0.12, envelope + jagged) * sunGapFactor(angle);
       points.push(new THREE.Vector3(rx, h, rz));
     }
 
@@ -845,7 +886,7 @@ function buildMatrixBackground(density = 1) {
   // Jeden wspólny mnożnik zamiast osobnego przycinania speedMin/speedMax w
   // każdym z trzech wywołań addLayer niżej, żeby względne różnice prędkości
   // między warstwami (bliska/środkowa/daleka) zostały zachowane.
-  const MATRIX_SPEED_MUL = 0.6;
+  const MATRIX_SPEED_MUL = 0.45;
   const baseTexture = buildMatrixCharacterTexture(rand, 26);
   // Wariant "dużych" strumieni - większe znaki (46px zamiast 26px), losowana
   // NIEZALEŻNIE dla części strumieni w każdej warstwie (patrz isBig w
