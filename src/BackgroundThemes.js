@@ -577,7 +577,7 @@ function buildSunTexture(rand, { core, mid, stripes }) {
     // gradiencie. Teraz paski schodzą w dół od połowy tarczy, z lukami
     // między nimi (przez które prześwituje gradient tła), więc czytają się
     // jako odrębne, kolorowe warstwy, nie jedna plama.
-    const stripeColors = ['#ffe066', '#ffb144', '#ff8a3d', '#ff6a4a', '#b34bff'];
+    const stripeColors = ['#ff0040', '#ff3366', '#ff6600', '#ffcc00'];
     let y = size * 0.52;
     const bottomLimit = size * 0.98;
     let i = 0;
@@ -628,7 +628,7 @@ function buildSunWithReflection(rand, { core, mid, stripes, radius, skyY, opacit
 // Prosty gwiazdozbiór (Points) w górnej połowie nieba - tani sposób na
 // dołożenie drobnego detalu/głębi bez dodatkowych draw calli (jeden Points
 // na cały zestaw).
-function buildStarfield(rand, count, color, radiusMin, radiusMax, heightMin, heightMax) {
+function buildStarfield(rand, count, color, radiusMin, radiusMax, heightMin, heightMax, size = 1.1) {
   const positions = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     const angle = rand() * Math.PI * 2;
@@ -640,15 +640,58 @@ function buildStarfield(rand, count, color, radiusMin, radiusMax, heightMin, hei
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const material = new THREE.PointsMaterial({
-    color, size: 1.1, transparent: true, opacity: 0.7, fog: false, depthWrite: false
+    color, size, transparent: true, opacity: 0.7, fog: false, depthWrite: false
   });
   return new THREE.Points(geometry, material);
+}
+
+// Gradientowe niebo - duża, płaska płaszczyzna daleko za całą resztą sceny
+// (ten sam wzorzec co słońce: pojedynczy, nieruchomy plane zamiast pełnej
+// kopuły/sfery, bo kamera w tej grze nigdy nie odwraca się o 180° od areny -
+// patrz sun.position w buildSunWithReflection). Tekstura to pionowy
+// gradient wypalony na canvasie (2×256px, rozciągnięty przez UV - nie
+// potrzeba więcej rozdzielczości dla gładkiego przejścia).
+// Kolory DOKŁADNIE z specyfikacji: #1a0033 (ciemny fiolet) u góry (zenit),
+// przez #6600cc w połowie, do #ff0080 (magenta) nisko, blisko horyzontu.
+function buildSynthwaveSky() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+  gradient.addColorStop(0, '#1a0033');
+  gradient.addColorStop(0.55, '#6600cc');
+  gradient.addColorStop(1, '#ff0080');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 2, 256);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  // CELOWO bez fog:false tutaj - w przeciwieństwie do słońca/gwiazd, niebo
+  // MA prawo lekko zlewać się z mgłą sceny (to i tak ta sama rodzina barw),
+  // a to niebo samo w sobie JEST tłem, więc pełne krycie mgłą nie ma
+  // znaczenia wizualnego (nic za nim nie ma).
+  const material = new THREE.MeshBasicMaterial({ map: texture });
+  // Wysoko i szeroko (2200×700), wyśrodkowane w okolicy wysokości słońca
+  // (skyY=50 w buildSunWithReflection) - górna część gradientu (fiolet)
+  // rozciąga się ponad szczyty gór, dolna (róż) schodzi w okolice
+  // horyzontu/podstawy gór, dokładnie tam, gdzie wg specyfikacji ma być
+  // różowo-fioletowa poświata.
+  const sky = new THREE.Mesh(new THREE.PlaneGeometry(2200, 700), material);
+  sky.position.set(0, 50, -750); // za najdalszym grzbietem (r=560, patrz buildRidge niżej) i za słońcem (z=-260)
+  return sky;
 }
 
 // --- SYNTHWAVE: low-poly góry z linii + kultowe zachodzące słońce --------
 function buildSynthwaveBackground() {
   const rand = makeRand(4242);
   const group = new THREE.Group();
+
+  // Niebo - MUSI być dodane pierwsze (patrz buildSynthwaveSky wyżej) - to
+  // po prostu daleka, płaska płaszczyzna za wszystkim innym, kolejność
+  // dodania do grupy nie wpływa na depth test, ale trzyma się tu tej
+  // konwencji dla czytelności (od najdalszego do najbliższego).
+  disposeAwareAdd(group, buildSynthwaveSky());
+
   // Migot krawędzi grzbietów - ta sama technika co classicEdgeSparkles w
   // motywie classic (opacity materiału animowana sinusoidalnie w
   // updateSynthwaveBackground niżej), tylko że tu JEDEN materiał = CAŁY
@@ -676,11 +719,15 @@ function buildSynthwaveBackground() {
 
   // Jedno, wyraźne, ale niedominujące słońce (umiarkowana opacity zamiast
   // 0.85) - z odbiciem na podłodze (patrz buildSunWithReflection wyżej).
-  // Ciepła paleta (żółć/pomarańcz), nie zimny róż jak poprzednio - razem z
-  // kolorowymi paskami u dołu tarczy (patrz buildSunTexture) daje klasyczny
-  // "zachód słońca", nie neonową plamę.
+  // Kolory dokładnie ze specyfikacji: czerwono-różowy rdzeń (core, środek
+  // tarczy) gasnący do pomarańczu na krawędzi (mid) - buildSunTexture
+  // miesza je promieniście (core w centrum, mid na obwodzie), więc to
+  // najbliższe odwzorowanie pionowego gradientu "góra czerwono-różowa, dół
+  // żółty" jakie da się uzyskać przy DOTYCHCZASOWEJ, promienistej metodzie
+  // (patrz komentarz w buildSunTexture o paskach, które dokładają resztę
+  // ciepłej gamy - żółć/pomarańcz/fiolet - w dolnej połowie tarczy).
   disposeAwareAdd(group, buildSunWithReflection(rand, {
-    core: '#fff6d5', mid: '#ff8a3d', stripes: true, radius: 60, skyY: 50, opacity: 0.6
+    core: '#ff3366', mid: '#ff8c2e', stripes: true, radius: 60, skyY: 50, opacity: 0.65
   }));
 
   // Góry - kontur (LineSegments, nie wypełnione trójkąty), żeby wyglądały
@@ -832,14 +879,21 @@ function buildSynthwaveBackground() {
   // wcześniej (baseHeight obniżone ~25-30%) i z większą liczbą segmentów
   // (więcej punktów = więcej miejsca na widoczne postrzępienie w strefach,
   // gdzie roughAmount w buildRidge() akurat jest wysoki - patrz komentarz
-  // tam).
-  disposeAwareAdd(group, buildRidge(260, 28, 0x00eaff, 34));
-  disposeAwareAdd(group, buildRidge(320, 38, 0xff2f9e, 34));
-  disposeAwareAdd(group, buildRidge(400, 52, 0x00eaff, 40));
-  disposeAwareAdd(group, buildRidge(480, 70, 0xff2f9e, 34));
-  disposeAwareAdd(group, buildRidge(560, 88, 0x00eaff, 32));
+  // tam). Paleta spójna niebiesko-cyjanowa (dwa bliskie odcienie błękitu,
+  // zamiast poprzedniego na przemian cyjan/róż) - zgodnie ze specyfikacją
+  // (kolor_linii: #00bfff), a nie neonowo-różowy akcent.
+  disposeAwareAdd(group, buildRidge(260, 28, 0x00bfff, 34));
+  disposeAwareAdd(group, buildRidge(320, 38, 0x2f9eff, 34));
+  disposeAwareAdd(group, buildRidge(400, 52, 0x00bfff, 40));
+  disposeAwareAdd(group, buildRidge(480, 70, 0x2f9eff, 34));
+  disposeAwareAdd(group, buildRidge(560, 88, 0x00bfff, 32));
 
-  disposeAwareAdd(group, buildStarfield(rand, 220, 0xffffff, 80, 400, 60, 220));
+  // Dwie warstwy gwiazd zamiast jednej - różne rozmiary punktów (JSON:
+  // "rozmiar: małe, różne wielkości"), nie jednolity rozmiar wszystkich
+  // gwiazd naraz. Większość drobnych + garstka wyraźnie większych, jaśniej
+  // "mrugających" gwiazd dla urozmaicenia.
+  disposeAwareAdd(group, buildStarfield(rand, 220, 0xffffff, 80, 400, 60, 220, 1.1));
+  disposeAwareAdd(group, buildStarfield(rand, 40, 0xffffff, 80, 400, 60, 220, 2.4));
 
   group.userData.synthRidgeSparkles = ridgeSparkles;
   return group;
