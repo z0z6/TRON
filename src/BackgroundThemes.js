@@ -721,32 +721,32 @@ function buildSynthwaveBackground() {
   // 0.85) - z odbiciem na podłodze (patrz buildSunWithReflection wyżej).
   // Kolory dokładnie ze specyfikacji: czerwono-różowy rdzeń (core, środek
   // tarczy) gasnący do pomarańczu na krawędzi (mid) - buildSunTexture
-  // miesza je promieniście (core w centrum, mid na obwodzie), więc to
-  // najbliższe odwzorowanie pionowego gradientu "góra czerwono-różowa, dół
-  // żółty" jakie da się uzyskać przy DOTYCHCZASOWEJ, promienistej metodzie
-  // (patrz komentarz w buildSunTexture o paskach, które dokładają resztę
-  // ciepłej gamy - żółć/pomarańcz/fiolet - w dolnej połowie tarczy).
+  // miesza je promieniście (core w centrum, mid na obwodzie).
+  // stripes: false - użytkownik zgłosił, że kolorowe paski renderowały się
+  // przed tarczą słońca zamiast na niej i psuły efekt; usunięte całkowicie
+  // zamiast próby naprawy pozycjonowania.
   disposeAwareAdd(group, buildSunWithReflection(rand, {
-    core: '#ff3366', mid: '#ff8c2e', stripes: true, radius: 60, skyY: 50, opacity: 0.65
+    core: '#ff3366', mid: '#ff8c2e', stripes: false, radius: 60, skyY: 50, opacity: 0.65
   }));
 
   // Góry - kontur (LineSegments, nie wypełnione trójkąty), żeby wyglądały
   // jak fluorescencyjne linie na tle ciemnego nieba, nie pełne bryły.
   // Iglice grzbietu schodzą daleko POD posadzkę (efekt cylindra) zamiast
   // kończyć się tuż przy jej poziomie.
-  function buildRidge(radius, baseHeight, color, segments) {
+  function buildRidge(radius, baseHeight, color, baseSegments) {
     const points = [];
-    const step = (Math.PI * 2) / segments;
+    const twoPi = Math.PI * 2;
     // Fazy losowane PER GRZBIET (nie wspólne dla wszystkich pięciu) - dzięki
     // temu każdy grzbiet ma WŁASNY, inny wzorzec tego, gdzie jest gładko, a
     // gdzie postrzępiono, zamiast identycznie powtarzającego się układu.
     const shapePhase = rand() * Math.PI * 2;
     const roughPhase = rand() * Math.PI * 2;
-    for (let i = 0; i <= segments; i++) {
-      const angle = i * step;
 
-      const { x: rx, z: rz } = ellipsePoint(angle, radius);
+    function roughAmountAt(angle) {
+      return 0.5 + 0.5 * Math.sin(angle * 3.1 + roughPhase);
+    }
 
+    function heightAt(angle) {
       // Gładka obwiednia złożona z DWÓCH fal o różnej częstotliwości -
       // zamiast jednej, dużej "górki" na cały grzbiet, daje kilka bliżej
       // siebie leżących par wzniesienie/obniżenie (pagórek, a kawałek dalej
@@ -755,24 +755,37 @@ function buildSynthwaveBackground() {
       const envelope = 0.4
         + 0.35 * (0.5 + 0.5 * Math.sin(angle * 2.3 + shapePhase))
         + 0.25 * (0.5 + 0.5 * Math.sin(angle * 3.7 + shapePhase * 1.7));
-
-      // Osobna, innoczęstotliwościowa fala steruje TYM, jak bardzo lokalny
-      // szum (jagged) jest widoczny w danym miejscu - blisko 0 daje gładki,
-      // zaokrąglony odcinek zbocza, blisko 1 mocno postrzępiony, skalisty
-      // odcinek. Naprzemienne strefy gładkie/postrzępione wzdłuż JEDNEGO
-      // grzbietu - efekt wyżynno-skalistego terenu zamiast jednostajnie
-      // "piłokształtnych" gór.
-      const roughAmount = 0.5 + 0.5 * Math.sin(angle * 3.1 + roughPhase);
-      const jagged = (rand() * 2 - 1) * roughAmount * 0.5;
-
+      const jagged = (rand() * 2 - 1) * roughAmountAt(angle) * 0.5;
       // Suma obwiedni i lokalnego szumu (dolny limit 0.12, żeby nawet w
       // najbardziej "zapadniętym" miejscu grzbiet nie zjechał do zera),
       // dodatkowo przemnożona przez sunGapFactor - to właśnie ono wyraźnie
       // obniża WSZYSTKIE grzbiety w kierunku słońca i w jego pobliżu,
       // odsłaniając niebo za nimi.
-      const h = baseHeight * Math.max(0.12, envelope + jagged) * sunGapFactor(angle);
-      points.push(new THREE.Vector3(rx, h, rz));
+      return baseHeight * Math.max(0.12, envelope + jagged) * sunGapFactor(angle);
     }
+
+    // KLUCZOWA ZMIANA: krok kątowy między punktami TEŻ się zmienia (nie
+    // tylko wysokość) - tam, gdzie roughAmount (ta sama fala co wyżej) jest
+    // wysoki, krok jest mały (gęsta siatka, dużo wąskich granii), tam gdzie
+    // niski - krok jest duży (rzadka, wygładzona siatka, kilka szerokich
+    // płaszczyzn). To właśnie daje WIDOCZNIE różną gęstość low-poly między
+    // fragmentami jednego grzbietu, a nie tylko różną amplitudę szumu przy
+    // wciąż tej samej liczbie wierzchołków. minStep/maxStep dają ~5x
+    // rozpiętość gęstości między najgęstszą a najrzadszą strefą.
+    const minStep = twoPi / (baseSegments * 2.2);
+    const maxStep = twoPi / (baseSegments * 0.45);
+
+    let angle = 0;
+    while (angle < twoPi) {
+      const { x: rx, z: rz } = ellipsePoint(angle, radius);
+      points.push(new THREE.Vector3(rx, heightAt(angle), rz));
+      const step = maxStep - (maxStep - minStep) * roughAmountAt(angle);
+      angle += step;
+    }
+    // Domknięcie pętli - ostatni punkt DOKŁADNIE w tym samym miejscu co
+    // pierwszy (angle=0), żeby grzbiet szczelnie się zamykał, bez szwu.
+    const closePoint = ellipsePoint(0, radius);
+    points.push(new THREE.Vector3(closePoint.x, heightAt(0), closePoint.z));
 
     // --- Wypełnienie: granowana bryła low-poly pod konturem ---
     // To właśnie odróżnia "kontur gór" (samą linię, jak dotąd) od
@@ -792,19 +805,28 @@ function buildSynthwaveBackground() {
     // zamiast liczyć na cieniowanie z normalnych, efekt graniastości
     // symulujemy czysto kolorystycznie, tym samym haczykiem
     // (onBeforeCompile) co reszta pliku.
-    // BUG Z POPRZEDNIEJ WERSJI (znaleziony po zrzucie ekranu użytkownika):
-    // fillBaseY był przypięty do tej samej, odległej głębokości (-172), co
-    // "zakopane" iglice LINII konturu. Dla niewidocznej linii to nieważne -
-    // ale dla WYPEŁNIONEJ, nieprzezroczystej powierzchni oznaczało to, że
-    // większość ściany siedziała W ŚRODKU bardzo rozciągniętego (180
-    // jednostek) gradientu ściemniania i wciąż była częściowo jasna -
-    // efekt: gigantyczna, wypełniająca ekran kolorowa "ściana" zamiast
-    // zwartej sylwetki górskiej. Poprawka: głębokość podstawy skalowana z
-    // WŁASNĄ wysokością tego grzbietu (zwarta, ~35-60 jednostek), a fade
-    // (niżej, w applyHorizonFade) używa DOPASOWANEGO, krótkiego zasięgu,
-    // żeby gradient realnie kończył się na granicy tej bryły, a nie gdzieś
-    // daleko poza nią.
-    const fillBaseY = -Math.max(35, baseHeight * 0.7);
+    // BUG Z RUNDY 5 (znaleziony po zrzucie ekranu użytkownika): fillBaseY
+    // był przypięty do tej samej, odległej głębokości (-172), co "zakopane"
+    // iglice LINII konturu. Dla niewidocznej linii to nieważne - ale dla
+    // WYPEŁNIONEJ, nieprzezroczystej powierzchni oznaczało to, że większość
+    // ściany siedziała W ŚRODKU bardzo rozciągniętego (180 jednostek)
+    // gradientu ściemniania i wciąż była częściowo jasna - gigantyczna,
+    // wypełniająca ekran kolorowa "ściana" zamiast zwartej sylwetki.
+    //
+    // POPRAWKA Z RUNDY 9 (użytkownik: "dociągnij tekstury maksymalnie w
+    // dół, do fundamentów"): dwie ODDZIELNE wartości zamiast jednej.
+    // fillGeometryDepth to jak DALEKO w dół sięga sama SIATKA - celowo
+    // głęboko (-200, z powrotem blisko dawnej wartości), żeby bryła zawsze
+    // "dochodziła do fundamentów" niezależnie od kąta kamery, bez
+    // widocznej luki. fillFadeDepth to jak szybko KOLOR gaśnie do czerni -
+    // zostaje KRÓTKI (jak w poprawce z Rundy 8), żeby nie wrócił bug z
+    // Rundy 5. Rozdzielenie tych dwóch rzeczy - to jest właśnie to, czego
+    // brakowało: głęboka siatka, ale szybko (blisko szczytu) gasnąca do
+    // czerni, więc jej głęboka część i tak jest niewidoczna, a mimo to
+    // fizycznie "sięga fundamentów".
+    const fillFadeDepth = Math.max(35, baseHeight * 0.7);
+    const fillGeometryDepth = 200;
+    const fillBaseY = -fillGeometryDepth;
     const fillBaseColor = new THREE.Color(color);
     const fillPositions = [];
     const fillColors = [];
@@ -844,11 +866,12 @@ function buildSynthwaveBackground() {
       polygonOffsetUnits: 1
     });
     // darkenFactor=0 (nie domyślne DARKEN_FACTOR) - podstawa bryły ma
-    // całkowicie zniknąć w czerni. fadeEndY = fillBaseY (NIE
-    // LIGHT_HEIGHT-FADE_RANGE) - to jest właśnie poprawka buga: zasięg
-    // ściemniania dopasowany do RZECZYWISTEJ wysokości tej konkretnej
-    // bryły, nie do odległej, wspólnej dla całej sceny stałej.
-    applyHorizonFade(fillMaterial, LIGHT_HEIGHT, fillBaseY, 0);
+    // całkowicie zniknąć w czerni. fadeEndY = LIGHT_HEIGHT-fillFadeDepth
+    // (KRÓTKI zasięg, NIE fillBaseY, który teraz jest znacznie głębiej) -
+    // gradient kończy się szybko, blisko szczytu, więc głęboka reszta
+    // siatki (do fillBaseY=-200) jest już całkowicie czarna/niewidoczna,
+    // mimo że fizycznie tam sięga.
+    applyHorizonFade(fillMaterial, LIGHT_HEIGHT, LIGHT_HEIGHT - fillFadeDepth, 0);
     disposeAwareAdd(group, new THREE.Mesh(fillGeometry, fillMaterial));
 
     // --- Kontur: świecąca linia grzbietu (bez zmian) ---
@@ -882,11 +905,11 @@ function buildSynthwaveBackground() {
   // tam). Paleta spójna niebiesko-cyjanowa (dwa bliskie odcienie błękitu,
   // zamiast poprzedniego na przemian cyjan/róż) - zgodnie ze specyfikacją
   // (kolor_linii: #00bfff), a nie neonowo-różowy akcent.
-  disposeAwareAdd(group, buildRidge(260, 28, 0x00bfff, 34));
-  disposeAwareAdd(group, buildRidge(320, 38, 0x2f9eff, 34));
-  disposeAwareAdd(group, buildRidge(400, 52, 0x00bfff, 40));
-  disposeAwareAdd(group, buildRidge(480, 70, 0x2f9eff, 34));
-  disposeAwareAdd(group, buildRidge(560, 88, 0x00bfff, 32));
+  disposeAwareAdd(group, buildRidge(260, 28, 0x00bfff, 55));
+  disposeAwareAdd(group, buildRidge(320, 38, 0x2f9eff, 55));
+  disposeAwareAdd(group, buildRidge(400, 52, 0x00bfff, 65));
+  disposeAwareAdd(group, buildRidge(480, 70, 0x2f9eff, 55));
+  disposeAwareAdd(group, buildRidge(560, 88, 0x00bfff, 50));
 
   // Dwie warstwy gwiazd zamiast jednej - różne rozmiary punktów (JSON:
   // "rozmiar: małe, różne wielkości"), nie jednolity rozmiar wszystkich
