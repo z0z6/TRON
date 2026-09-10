@@ -662,6 +662,70 @@ function buildSynthwaveBackground() {
       const { x: rx, z: rz } = ellipsePoint(angle, radius);
       points.push(new THREE.Vector3(rx, h, rz));
     }
+
+    // --- Wypełnienie: granowana bryła low-poly pod konturem ---
+    // To właśnie odróżnia "kontur gór" (samą linię, jak dotąd) od
+    // rozpoznawalnych, WYPEŁNIONYCH low-poly gór znanych z grafik
+    // synthwave. Ta sama sekwencja punktów co linia grzbietu niżej, ale
+    // teraz jako pas trójkątów schodzący od grzbietu do stałej, głębokiej
+    // podstawy (i tak niewidocznej - patrz dobór wartości bazowej Y niżej).
+    // Wierzchołki KAŻDEGO trójkąta są WŁASNE, nie współdzielone z
+    // sąsiadami (positions dopisywane wprost, bez indeksowania) - to
+    // pozwala nadać każdemu trójkątowi osobny, losowo przyciemniony
+    // odcień koloru grzbietu (fillJitter), zamiast gładkiego,
+    // interpolowanego gradientu. Właśnie ten "połamany", nierówny rozkład
+    // jasności między sąsiednimi granami - a NIE geometria sama w sobie -
+    // jest tym, co wizualnie czyta się jako "low poly" w tej estetyce.
+    // Materiał jest unlit (MeshBasicMaterial) celowo: żadnego prawdziwego
+    // oświetlenia w tej scenie nie ma (tylko AmbientLight w main.js), więc
+    // zamiast liczyć na cieniowanie z normalnych, efekt graniastości
+    // symulujemy czysto kolorystycznie, tym samym haczykiem
+    // (onBeforeCompile) co reszta pliku.
+    const fillBaseY = LIGHT_HEIGHT - FADE_RANGE; // ta sama głębokość, przy której applyHorizonFade i tak w pełni ściemnia do czerni
+    const fillBaseColor = new THREE.Color(color);
+    const fillPositions = [];
+    const fillColors = [];
+    const jitterColor = new THREE.Color();
+    const pushFillTriangle = (p1, p2, p3) => {
+      fillPositions.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z);
+      // Jeden losowy współczynnik na CAŁY trójkąt (nie osobny na wierzchołek)
+      // - inaczej trzy różne jasności w rogach tego samego trójkąta
+      // wygładziłyby się przez interpolację i efekt graniastości by zniknął.
+      const jitter = 0.35 + rand() * 0.5;
+      jitterColor.copy(fillBaseColor).multiplyScalar(jitter);
+      for (let v = 0; v < 3; v++) fillColors.push(jitterColor.r, jitterColor.g, jitterColor.b);
+    };
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const baseA = { x: a.x, y: fillBaseY, z: a.z };
+      const baseB = { x: b.x, y: fillBaseY, z: b.z };
+      pushFillTriangle(a, baseA, baseB);
+      pushFillTriangle(a, baseB, b);
+    }
+    const fillGeometry = new THREE.BufferGeometry();
+    fillGeometry.setAttribute('position', new THREE.Float32BufferAttribute(fillPositions, 3));
+    fillGeometry.setAttribute('color', new THREE.Float32BufferAttribute(fillColors, 3));
+    const fillMaterial = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      fog: true,
+      // Wypełnienie i kontur (LineSegments niżej) dzielą DOKŁADNIE te same
+      // wierzchołki grzbietu - bez tego linia i powierzchnia trójkątów
+      // migotałyby na granicy (z-fighting), bo leżą w tej samej płaszczyźnie
+      // głębi. polygonOffset odsuwa wypełnienie o włos w głąb, żeby linia
+      // konturu zawsze wygrywała test głębi i została ostro widoczna na wierzchu.
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    });
+    // darkenFactor=0 (nie domyślne DARKEN_FACTOR) - podstawa bryły ma
+    // całkowicie zniknąć w czerni, tak samo jak zakopane iglice linii
+    // konturu niżej, żeby oba elementy spójnie "wtapiały się" w tło.
+    applyHorizonFade(fillMaterial, LIGHT_HEIGHT, LIGHT_HEIGHT - FADE_RANGE, 0);
+    disposeAwareAdd(group, new THREE.Mesh(fillGeometry, fillMaterial));
+
+    // --- Kontur: świecąca linia grzbietu (bez zmian) ---
     const positions = [];
     for (let i = 0; i < points.length - 1; i++) {
       positions.push(points[i].x, points[i].y, points[i].z, points[i + 1].x, points[i + 1].y, points[i + 1].z);
