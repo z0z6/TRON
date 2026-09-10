@@ -502,6 +502,17 @@ function buildClassicBackground(density = 1) {
   group.userData.classicScratchColor = new THREE.Color();
   group.userData.classicEdgeSparkles = classicEdgeSparkles;
 
+  // Gwiazdy - najdalsza warstwa budynków sięga r=650/h=260 (patrz addLayer
+  // wyżej), więc gwiazdy zaczynają się dopiero za nią (r 700-950,
+  // h 160-380), żeby nigdy nie "przebijały" przez sylwetki budynków.
+  // Delikatny cyjanowy odcień zamiast czystej bieli - spójny z paletą
+  // motywu (theme.p1), zamiast wyglądać jak przypadkowa domieszka innego
+  // klimatu. Skalowane tą samą `density` co budynki - na "low" tierze
+  // proporcjonalnie mniej punktów.
+  disposeAwareAdd(group, buildStarfield(
+    rand, Math.max(60, Math.round(160 * density)), 0xaee8ff, 700, 950, 160, 380
+  ));
+
   return group;
 }
 
@@ -814,6 +825,17 @@ function buildMatrixBackground(density = 1) {
   addLayer(Math.max(25, Math.round(85 * density)), 480, 650, 70, 150, 0.42, 8, 20, 11, 19);
 
   group.userData.matrixColumns = columns;
+
+  // Gwiazdy - deszcz sięga r=650/h=150 (patrz addLayer wyżej), więc gwiazdy
+  // zaczynają się dopiero za nim. Ten motyw ma fogDensity=0.0 (bez mgły w
+  // ogóle - patrz THEME_BACKGROUNDS niżej), więc bez tego pustka za
+  // deszczem była całkiem czarna/pusta. Kolor ledwie muśnięty zielenią
+  // (prawie biały) - to gwiazdy, nie kolejna warstwa deszczu, mają się od
+  // niego odróżniać, nie z nim zlewać.
+  disposeAwareAdd(group, buildStarfield(
+    rand, Math.max(50, Math.round(140 * density)), 0xcdffd9, 700, 950, 170, 380
+  ));
+
   return group;
 }
 
