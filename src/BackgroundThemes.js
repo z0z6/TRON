@@ -745,7 +745,19 @@ function buildSynthwaveBackground() {
     // zamiast liczyć na cieniowanie z normalnych, efekt graniastości
     // symulujemy czysto kolorystycznie, tym samym haczykiem
     // (onBeforeCompile) co reszta pliku.
-    const fillBaseY = LIGHT_HEIGHT - FADE_RANGE; // ta sama głębokość, przy której applyHorizonFade i tak w pełni ściemnia do czerni
+    // BUG Z POPRZEDNIEJ WERSJI (znaleziony po zrzucie ekranu użytkownika):
+    // fillBaseY był przypięty do tej samej, odległej głębokości (-172), co
+    // "zakopane" iglice LINII konturu. Dla niewidocznej linii to nieważne -
+    // ale dla WYPEŁNIONEJ, nieprzezroczystej powierzchni oznaczało to, że
+    // większość ściany siedziała W ŚRODKU bardzo rozciągniętego (180
+    // jednostek) gradientu ściemniania i wciąż była częściowo jasna -
+    // efekt: gigantyczna, wypełniająca ekran kolorowa "ściana" zamiast
+    // zwartej sylwetki górskiej. Poprawka: głębokość podstawy skalowana z
+    // WŁASNĄ wysokością tego grzbietu (zwarta, ~35-60 jednostek), a fade
+    // (niżej, w applyHorizonFade) używa DOPASOWANEGO, krótkiego zasięgu,
+    // żeby gradient realnie kończył się na granicy tej bryły, a nie gdzieś
+    // daleko poza nią.
+    const fillBaseY = -Math.max(35, baseHeight * 0.7);
     const fillBaseColor = new THREE.Color(color);
     const fillPositions = [];
     const fillColors = [];
@@ -774,6 +786,7 @@ function buildSynthwaveBackground() {
       transparent: true,
       opacity: 0.9,
       fog: true,
+      side: THREE.DoubleSide,
       // Wypełnienie i kontur (LineSegments niżej) dzielą DOKŁADNIE te same
       // wierzchołki grzbietu - bez tego linia i powierzchnia trójkątów
       // migotałyby na granicy (z-fighting), bo leżą w tej samej płaszczyźnie
@@ -784,9 +797,11 @@ function buildSynthwaveBackground() {
       polygonOffsetUnits: 1
     });
     // darkenFactor=0 (nie domyślne DARKEN_FACTOR) - podstawa bryły ma
-    // całkowicie zniknąć w czerni, tak samo jak zakopane iglice linii
-    // konturu niżej, żeby oba elementy spójnie "wtapiały się" w tło.
-    applyHorizonFade(fillMaterial, LIGHT_HEIGHT, LIGHT_HEIGHT - FADE_RANGE, 0);
+    // całkowicie zniknąć w czerni. fadeEndY = fillBaseY (NIE
+    // LIGHT_HEIGHT-FADE_RANGE) - to jest właśnie poprawka buga: zasięg
+    // ściemniania dopasowany do RZECZYWISTEJ wysokości tej konkretnej
+    // bryły, nie do odległej, wspólnej dla całej sceny stałej.
+    applyHorizonFade(fillMaterial, LIGHT_HEIGHT, fillBaseY, 0);
     disposeAwareAdd(group, new THREE.Mesh(fillGeometry, fillMaterial));
 
     // --- Kontur: świecąca linia grzbietu (bez zmian) ---
