@@ -552,7 +552,7 @@ function updateClassicBackground(group, elapsed) {
 // Generuje teksturę słońca (canvas, radialny gradient) - daje realne
 // wrażenie "kuli światła" zamiast płaskiego jednokolorowego kółka, i
 // opcjonalnie wypala w niej poziome pasy (synthwave - "przysłonięte" słońce).
-function buildSunTexture(rand, { core, mid, stripes }) {
+function buildSunTexture(rand, { core, mid, stripes, verticalGradient }) {
   const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -560,14 +560,45 @@ function buildSunTexture(rand, { core, mid, stripes }) {
   const ctx = canvas.getContext('2d');
   const c = size / 2;
 
-  const gradient = ctx.createRadialGradient(c, c, 0, c, c, c);
-  gradient.addColorStop(0, core);
-  gradient.addColorStop(0.55, mid);
-  gradient.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(c, c, c, 0, Math.PI * 2);
-  ctx.fill();
+  if (verticalGradient) {
+    // Tarcza wypełniona PIONOWYM (góra->dół) gradientem zamiast
+    // promienistym (od środka) - użytkownik chciał barw mieszających się
+    // w osi pionowej, nie koncentrycznie. Najpierw wypełnienie kołowego
+    // obszaru gradientem liniowym...
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(c, c, c, 0, Math.PI * 2);
+    ctx.clip();
+    const vGradient = ctx.createLinearGradient(0, 0, 0, size);
+    vGradient.addColorStop(0, core);
+    vGradient.addColorStop(1, mid);
+    ctx.fillStyle = vGradient;
+    ctx.fillRect(0, 0, size, size);
+    ctx.restore();
+
+    // ...potem osobna, radialna maska alpha (destination-in: zachowuje to,
+    // co już narysowane, ale przycina jego PRZEZROCZYSTOŚĆ), żeby krawędź
+    // tarczy miękko gasła zamiast być twardo "wyciętą nożyczkami" - bez
+    // tego pionowy gradient kończyłby się ostrym okręgiem.
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-in';
+    const alphaMask = ctx.createRadialGradient(c, c, 0, c, c, c);
+    alphaMask.addColorStop(0, 'rgba(0,0,0,1)');
+    alphaMask.addColorStop(0.78, 'rgba(0,0,0,1)');
+    alphaMask.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = alphaMask;
+    ctx.fillRect(0, 0, size, size);
+    ctx.restore();
+  } else {
+    const gradient = ctx.createRadialGradient(c, c, 0, c, c, c);
+    gradient.addColorStop(0, core);
+    gradient.addColorStop(0.55, mid);
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(c, c, c, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   if (stripes) {
     // Kolorowe pasy (żółty -> pomarańczowy -> fioletowy) skupione w DOLNEJ
@@ -604,9 +635,9 @@ function buildSunTexture(rand, { core, mid, stripes }) {
 // tego odbicie to osobny mesh: odwrócony w pionie, wyraźnie przygaszony,
 // ustawiony dokładnie tyle samo pod poziomem podłogi, ile słońce jest nad
 // nim - czyli geometrycznie poprawne, ale w pełni kontrolowane.
-function buildSunWithReflection(rand, { core, mid, stripes, radius, skyY, opacity }) {
+function buildSunWithReflection(rand, { core, mid, stripes, radius, skyY, opacity, verticalGradient }) {
   const group = new THREE.Group();
-  const texture = buildSunTexture(rand, { core, mid, stripes });
+  const texture = buildSunTexture(rand, { core, mid, stripes, verticalGradient });
 
   const material = new THREE.MeshBasicMaterial({
     map: texture, transparent: true, opacity,
@@ -719,14 +750,11 @@ function buildSynthwaveBackground() {
 
   // Jedno, wyraźne, ale niedominujące słońce (umiarkowana opacity zamiast
   // 0.85) - z odbiciem na podłodze (patrz buildSunWithReflection wyżej).
-  // Kolory dokładnie ze specyfikacji: czerwono-różowy rdzeń (core, środek
-  // tarczy) gasnący do pomarańczu na krawędzi (mid) - buildSunTexture
-  // miesza je promieniście (core w centrum, mid na obwodzie).
-  // stripes: false - użytkownik zgłosił, że kolorowe paski renderowały się
-  // przed tarczą słońca zamiast na niej i psuły efekt; usunięte całkowicie
-  // zamiast próby naprawy pozycjonowania.
+  // Żółto-pomarańczowa paleta (głęboki pomarańcz u góry, cieplejsza żółć u
+  // dołu), barwy mieszają się gradientowo w OSI PIONOWEJ (verticalGradient:
+  // true - patrz buildSunTexture), nie promieniście od środka jak wcześniej.
   disposeAwareAdd(group, buildSunWithReflection(rand, {
-    core: '#ff3366', mid: '#ff8c2e', stripes: false, radius: 60, skyY: 50, opacity: 0.65
+    core: '#ff6a00', mid: '#ffd23f', stripes: false, radius: 60, skyY: 50, opacity: 0.65, verticalGradient: true
   }));
 
   // Góry - kontur (LineSegments, nie wypełnione trójkąty), żeby wyglądały
@@ -752,10 +780,10 @@ function buildSynthwaveBackground() {
       // siebie leżących par wzniesienie/obniżenie (pagórek, a kawałek dalej
       // już dolina) - bardziej wyżynny, poszarpany profil, mniej
       // jednostajnie "falisty".
-      const envelope = 0.4
-        + 0.35 * (0.5 + 0.5 * Math.sin(angle * 2.3 + shapePhase))
-        + 0.25 * (0.5 + 0.5 * Math.sin(angle * 3.7 + shapePhase * 1.7));
-      const jagged = (rand() * 2 - 1) * roughAmountAt(angle) * 0.5;
+      const envelope = 0.22
+        + 0.48 * (0.5 + 0.5 * Math.sin(angle * 2.3 + shapePhase))
+        + 0.30 * (0.5 + 0.5 * Math.sin(angle * 3.7 + shapePhase * 1.7));
+      const jagged = (rand() * 2 - 1) * roughAmountAt(angle) * 0.65;
       // Suma obwiedni i lokalnego szumu (dolny limit 0.12, żeby nawet w
       // najbardziej "zapadniętym" miejscu grzbiet nie zjechał do zera),
       // dodatkowo przemnożona przez sunGapFactor - to właśnie ono wyraźnie
@@ -824,7 +852,7 @@ function buildSynthwaveBackground() {
     // brakowało: głęboka siatka, ale szybko (blisko szczytu) gasnąca do
     // czerni, więc jej głęboka część i tak jest niewidoczna, a mimo to
     // fizycznie "sięga fundamentów".
-    const fillFadeDepth = Math.max(35, baseHeight * 0.7);
+    const fillFadeDepth = Math.max(90, baseHeight * 1.8);
     const fillGeometryDepth = 200;
     const fillBaseY = -fillGeometryDepth;
     const fillBaseColor = new THREE.Color(color);
@@ -964,6 +992,17 @@ function buildMatrixCharacterTexture(rand, charSize = 26) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+  // KLUCZOWA POPRAWKA: ta tekstura jest powtarzana WIELE razy wzdłuż
+  // strumienia (texture.repeat.set(1, totalHeight/14) w addLayer niżej,
+  // często 10+ powtórzeń). Domyślne mipmapowanie (generateMipmaps=true,
+  // minFilter=LinearMipmapLinear) przy tylu powtórzeniach na stosunkowo
+  // niewielkim obiekcie na ekranie ROZMYWA ciasno powtarzający się wzór w
+  // gładką, prawie jednolitą barwę - to jest dokładnie ten efekt "prawie
+  // jednolitych promieni bez widocznych znaków", o którym pisał użytkownik.
+  // Wyłączenie mipmap + LinearFilter (zamiast domyślnego
+  // LinearMipmapLinearFilter) trzyma wzór ostrym niezależnie od odległości.
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
   return texture;
 }
 
@@ -978,7 +1017,7 @@ function buildMatrixBackground(density = 1) {
   // Jeden wspólny mnożnik zamiast osobnego przycinania speedMin/speedMax w
   // każdym z trzech wywołań addLayer niżej, żeby względne różnice prędkości
   // między warstwami (bliska/środkowa/daleka) zostały zachowane.
-  const MATRIX_SPEED_MUL = 0.45;
+  const MATRIX_SPEED_MUL = 0.35;
   const baseTexture = buildMatrixCharacterTexture(rand, 26);
   // Wariant "dużych" strumieni - większe znaki (46px zamiast 26px), losowana
   // NIEZALEŻNIE dla części strumieni w każdej warstwie (patrz isBig w
@@ -1003,9 +1042,19 @@ function buildMatrixBackground(density = 1) {
       const angle = rand() * Math.PI * 2;
       const radius = radiusMin + rand() * (radiusMax - radiusMin);
       const visibleHeight = heightMin + rand() * (heightMax - heightMin);
-      // Cylinder: strumień ciągnie się daleko pod posadzkę, nie tylko do
-      // jej poziomu.
-      const { centerY, totalHeight } = buryBelowFloor(rand, visibleHeight, 200, 350);
+      // Górna krawędź WSZYSTKICH strumieni w tej warstwie zaczyna się w tym
+      // samym, stałym miejscu (FLOOR_Y + heightMax) - NIE przez
+      // buryBelowFloor() (ta funkcja liczy topY = FLOOR_Y + visibleHeight,
+      // co przy losowym visibleHeight per strumień dawało "postrzępioną",
+      // niespójną górną krawędź całej warstwy - dokładnie to zgłosił
+      // użytkownik: "niektóre zaczynają się coraz niżej"). visibleHeight
+      // dalej losuje DŁUGOŚĆ widocznego odcinka (różne strumienie różnej
+      // długości), ale odejmowaną w dół OD WSPÓLNEGO, stałego topu, a nie
+      // przesuwającą sam top.
+      const buried = 200 + rand() * 150;
+      const topY = FLOOR_Y + heightMax;
+      const totalHeight = visibleHeight + buried;
+      const centerY = topY - totalHeight / 2;
 
       // Trójwariantowy rozmiar (zamiast tylko duże/normalne): ~18% strumieni
       // wyraźnie WIĘKSZYCH (czyt. bliższych widzowi - duże, szerokie glify,
