@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+npm-debug.log*
+*.log
+
+# Vite cache
+src/.vite/
+
+# Coverage / test output
+coverage/
+
+# NOTE: 3d/ is intentionally NOT ignored - it's the built bundle that
+# GitHub Pages serves directly and is committed by the build-3d.yml
+# workflow. See README.md "Struktura repo".
