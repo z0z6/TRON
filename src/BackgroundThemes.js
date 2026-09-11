@@ -231,7 +231,11 @@ function buildClassicBackground(density = 1) {
       // świateł niż wcześniej, zamiast być niemal pusta.
       const lowY = -2;
       const topY = FLOOR_Y + height;
-      const heightFrac = Math.pow(rand(), 0.8);
+      // Wykładnik obniżony z 0.8 do 0.55 - jeszcze wyraźniejsze gęstnienie
+      // ku wierzchołkowi budynku (na życzenie: więcej diod skupionych
+      // bliżej szczytu bryły, mniej w partii przyziemnej), start zakresu
+      // (lowY) zostaje bez zmian - tuż poniżej poziomu areny.
+      const heightFrac = Math.pow(rand(), 0.55);
       const worldY = lowY + heightFrac * (topY - lowY);
 
       // Panel diody leży płasko na ścianie: jego "szeroka" oś biegnie
@@ -270,7 +274,9 @@ function buildClassicBackground(density = 1) {
       // najmocniej tam, gdzie już jest najwięcej diod, i rzednąc w dół.
       const lowY = -2;
       const topY = FLOOR_Y + height;
-      const heightFrac = Math.pow(rand(), 0.4);
+      // Wykładnik obniżony z 0.4 do 0.28 - szczeble mają teraz jeszcze
+      // wyraźniej rosnącą liczebność w stronę wierzchołka bryły.
+      const heightFrac = Math.pow(rand(), 0.28);
       const worldY = lowY + heightFrac * (topY - lowY);
 
       const rungRotY = rotY + (face < 2 ? Math.PI / 2 : 0);
@@ -359,14 +365,17 @@ function buildClassicBackground(density = 1) {
       // Jeszcze więcej diod niż poprzednio (22-56 zamiast 14-38 na
       // budynek) - w połączeniu z mocniejszym wykładnikiem rozkładu (0.4)
       // większość z nich ląduje w górnej partii, gdzie już było ich najwięcej.
+      // Jeszcze więcej diod na budynek (55-135 zamiast 38-83) - w połączeniu
+      // z mocniejszym wykładnikiem rozkładu (0.55, patrz addBuildingDiodes)
+      // wyraźnie zagęszcza światła w górnej partii budynków.
       const diodeDensityMul = 0.6 + 0.4 * density;
-      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(2, Math.round((38 + Math.floor(rand() * 46)) * diodeDensityMul)));
+      addBuildingDiodes(px, pz, dummy.rotation.y, width, depth, height, Math.max(3, Math.round((55 + Math.floor(rand() * 80)) * diodeDensityMul)));
 
-      // Więcej szczebli niż poprzednio (5-12 zamiast 3-8) - patrz
+      // Więcej szczebli niż poprzednio (8-17 zamiast 5-12) - patrz
       // addBuildingRungs powyżej. W PEŁNI skalowane przez density - to
       // OSOBNE obiekty Line (draw call na każdy), więc to one, nie diody,
       // realnie odciążają słaby sprzęt.
-      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, Math.round((5 + Math.floor(rand() * 7)) * density));
+      addBuildingRungs(px, pz, dummy.rotation.y, width, depth, height, Math.round((8 + Math.floor(rand() * 10)) * density));
 
       // Świecąca, skrząca się krawędź TEGO budynku - ta sama technika co
       // lodowe bryły w glacier (EdgesGeometry + LineSegments, opacity
@@ -770,6 +779,20 @@ function buildSynthwaveBackground() {
     const shapePhase = rand() * Math.PI * 2;
     const roughPhase = rand() * Math.PI * 2;
 
+    // Częstotliwości obwiedni i mnożnik pofałdowania losowane PER GRZBIET
+    // (nie stałe 2.3/3.7/0.65 jak wcześniej) - to właśnie one decydują,
+    // GDZIE POZIOMO (pod jakimi kątami wokół areny) wypadają wzniesienia i
+    // doliny danego grzbietu. Różne częstotliwości między grzbietami =
+    // szczyty jednego grzbietu NIE pokrywają się w pionie ze szczytami
+    // sąsiedniego - poziomy układ każdego pasma jest inny. waveMul różnicuje
+    // też samą intensywność postrzępienia między grzbietami (jeden gładszy,
+    // inny bardziej poszarpany), niezależnie od częstotliwości.
+    const freqA = 1.7 + rand() * 1.3;
+    const freqB = 3.0 + rand() * 2.0;
+    const ampA = 0.36 + rand() * 0.26;
+    const ampB = 0.18 + rand() * 0.24;
+    const waveMul = 0.4 + rand() * 0.6;
+
     function roughAmountAt(angle) {
       return 0.5 + 0.5 * Math.sin(angle * 3.1 + roughPhase);
     }
@@ -779,11 +802,13 @@ function buildSynthwaveBackground() {
       // zamiast jednej, dużej "górki" na cały grzbiet, daje kilka bliżej
       // siebie leżących par wzniesienie/obniżenie (pagórek, a kawałek dalej
       // już dolina) - bardziej wyżynny, poszarpany profil, mniej
-      // jednostajnie "falisty".
+      // jednostajnie "falisty". freqA/freqB/ampA/ampB teraz losowane PER
+      // GRZBIET (patrz wyżej) zamiast być stałymi 2.3/3.7/0.48/0.30 -
+      // każdy grzbiet ma więc WŁASNY, inny rytm wzniesień/dolin w poziomie.
       const envelope = 0.22
-        + 0.48 * (0.5 + 0.5 * Math.sin(angle * 2.3 + shapePhase))
-        + 0.30 * (0.5 + 0.5 * Math.sin(angle * 3.7 + shapePhase * 1.7));
-      const jagged = (rand() * 2 - 1) * roughAmountAt(angle) * 0.65;
+        + ampA * (0.5 + 0.5 * Math.sin(angle * freqA + shapePhase))
+        + ampB * (0.5 + 0.5 * Math.sin(angle * freqB + shapePhase * 1.7));
+      const jagged = (rand() * 2 - 1) * roughAmountAt(angle) * waveMul;
       // Suma obwiedni i lokalnego szumu (dolny limit 0.12, żeby nawet w
       // najbardziej "zapadniętym" miejscu grzbiet nie zjechał do zera),
       // dodatkowo przemnożona przez sunGapFactor - to właśnie ono wyraźnie
@@ -926,18 +951,27 @@ function buildSynthwaveBackground() {
 
   // Pięć grzbietów zamiast trzech - gęściej upakowane pasmo gór, więcej
   // sylwetek nakładających się na siebie przy różnych promieniach/
-  // wysokościach (więcej "brył" low-poly, większa głębia). Niższe niż
-  // wcześniej (baseHeight obniżone ~25-30%) i z większą liczbą segmentów
-  // (więcej punktów = więcej miejsca na widoczne postrzępienie w strefach,
-  // gdzie roughAmount w buildRidge() akurat jest wysoki - patrz komentarz
-  // tam). Paleta spójna niebiesko-cyjanowa (dwa bliskie odcienie błękitu,
-  // zamiast poprzedniego na przemian cyjan/róż) - zgodnie ze specyfikacją
-  // (kolor_linii: #00bfff), a nie neonowo-różowy akcent.
-  disposeAwareAdd(group, buildRidge(260, 28, 0x00bfff, 55));
-  disposeAwareAdd(group, buildRidge(320, 38, 0x2f9eff, 55));
-  disposeAwareAdd(group, buildRidge(400, 52, 0x00bfff, 65));
-  disposeAwareAdd(group, buildRidge(480, 70, 0x2f9eff, 55));
-  disposeAwareAdd(group, buildRidge(560, 88, 0x00bfff, 50));
+  // wysokościach (więcej "brył" low-poly, większa głębia). Grzbiet
+  // NAJBLIŻSZY arenie ma teraz WYRAŹNIE niższy wierzchołek (16, wcześniej
+  // 28) - na życzenie: pagórki bliżej areny mają być niżej położone.
+  // baseHeight między grzbietami dalej rośnie z odległością (żeby dalsze
+  // pasma wciąż wystawały ponad bliższe), ale NIE liniowo jak wcześniej -
+  // skoki są teraz nierówne (16→30→46→60→86), więc różnica wysokości
+  // między sąsiednimi grzbietami sama w sobie jest zróżnicowana. Liczba
+  // segmentów (gęstość siatki low-poly) też przestała rosnąć w prostej
+  // kolejności z promieniem - grzbiety mieszają rzadsze/gęstsze sąsiedztwo
+  // (46/62/74/50/38), tak jak i same częstotliwości/amplitudy pofałdowania
+  // (patrz freqA/freqB/ampA/ampB/waveMul w buildRidge powyżej) są losowane
+  // OSOBNO na grzbiet - stąd większe zróżnicowanie wysokości, zagęszczenia
+  // i pofałdowania między pasmami, a ich krawędzie (szczyty/doliny) wypadają
+  // pod różnymi kątami względem areny, nie są ustawione w rządku. Paleta
+  // spójna niebiesko-cyjanowa (dwa bliskie odcienie błękitu) - zgodnie ze
+  // specyfikacją (kolor_linii: #00bfff).
+  disposeAwareAdd(group, buildRidge(260, 16, 0x00bfff, 46));
+  disposeAwareAdd(group, buildRidge(320, 30, 0x2f9eff, 62));
+  disposeAwareAdd(group, buildRidge(400, 46, 0x00bfff, 74));
+  disposeAwareAdd(group, buildRidge(480, 60, 0x2f9eff, 50));
+  disposeAwareAdd(group, buildRidge(560, 86, 0x00bfff, 38));
 
   // Dwie warstwy gwiazd zamiast jednej - różne rozmiary punktów (JSON:
   // "rozmiar: małe, różne wielkości"), nie jednolity rozmiar wszystkich
@@ -1013,11 +1047,16 @@ function buildMatrixBackground(density = 1) {
   const rand = makeRand(7331);
   const group = new THREE.Group();
   // Spowalnia CAŁY deszcz (mnożnik na finalną prędkość każdego strumienia,
-  // patrz "speed" w addLayer niżej) - 0.6 = 60% poprzedniej prędkości.
-  // Jeden wspólny mnożnik zamiast osobnego przycinania speedMin/speedMax w
-  // każdym z trzech wywołań addLayer niżej, żeby względne różnice prędkości
-  // między warstwami (bliska/środkowa/daleka) zostały zachowane.
-  const MATRIX_SPEED_MUL = 0.35;
+  // patrz "speed" w addLayer niżej) - na życzenie ZNACZNIE wolniej niż
+  // wcześniej (0.14, było 0.35), żeby zamiast rozmytego, jednolitego
+  // "skrzenia" dało się faktycznie odczytać przesuwające się pojedyncze
+  // cyfry/litery/symbole (tekstura już ich używa - patrz
+  // buildMatrixCharacterTexture powyżej - problemem była głównie zbyt
+  // duża prędkość przewijania offsetu tekstury). Jeden wspólny mnożnik
+  // zamiast osobnego przycinania speedMin/speedMax w każdym z trzech
+  // wywołań addLayer niżej, żeby względne różnice prędkości między
+  // warstwami (bliska/środkowa/daleka) zostały zachowane.
+  const MATRIX_SPEED_MUL = 0.14;
   const baseTexture = buildMatrixCharacterTexture(rand, 26);
   // Wariant "dużych" strumieni - większe znaki (46px zamiast 26px), losowana
   // NIEZALEŻNIE dla części strumieni w każdej warstwie (patrz isBig w
@@ -1051,7 +1090,9 @@ function buildMatrixBackground(density = 1) {
       // dalej losuje DŁUGOŚĆ widocznego odcinka (różne strumienie różnej
       // długości), ale odejmowaną w dół OD WSPÓLNEGO, stałego topu, a nie
       // przesuwającą sam top.
-      const buried = 200 + rand() * 150;
+      // Fundamenty zejść niżej niż wcześniej (na życzenie: "niżej
+      // fundamenty") - zakres podniesiony z 200-350 do 260-460.
+      const buried = 260 + rand() * 200;
       const topY = FLOOR_Y + heightMax;
       const totalHeight = visibleHeight + buried;
       const centerY = topY - totalHeight / 2;
@@ -1103,16 +1144,16 @@ function buildMatrixBackground(density = 1) {
   }
 
   // Bliższa warstwa - mniej strumieni, ale szersze, jaśniejsze i szybsze.
-  // Więcej i szersze niż wcześniej (było 46 strumieni, szerokość 5-9).
-  addLayer(Math.max(20, Math.round(70 * density)), 300, 400, 55, 100, 0.9, 20, 45, 8, 15);
-  // Środkowa warstwa (NOWA) - wypełnia lukę głębi między bliską a dalszą,
-  // dodatkowo zagęszczając ścianę cyfr.
-  addLayer(Math.max(15, Math.round(55 * density)), 380, 480, 60, 120, 0.65, 14, 32, 9, 16);
-  // Dalsza warstwa - więcej, szersze niż wcześniej (było 64 strumienie,
-  // szerokość 6-12), wciąż wolniejsze i przygaszone (głębia, paralaksa przy
-  // skręcaniu kamery). Zasięg promienia przesunięty do 480-650, żeby nie
-  // dublować się z nową warstwą środkową powyżej.
-  addLayer(Math.max(25, Math.round(85 * density)), 480, 650, 70, 150, 0.42, 8, 20, 11, 19);
+  // Wierzchołki podniesione (heightMax 100→140 - na życzenie: "wyżej
+  // wierzchołki") - promienie sięgają teraz wyraźnie wyżej ponad areną.
+  addLayer(Math.max(20, Math.round(70 * density)), 300, 400, 55, 140, 0.9, 20, 45, 8, 15);
+  // Środkowa warstwa - wypełnia lukę głębi między bliską a dalszą,
+  // dodatkowo zagęszczając ścianę cyfr. Wierzchołki podniesione (120→170).
+  addLayer(Math.max(15, Math.round(55 * density)), 380, 480, 60, 170, 0.65, 14, 32, 9, 16);
+  // Dalsza warstwa - wolniejsze i przygaszone (głębia, paralaksa przy
+  // skręcaniu kamery). Wierzchołki podniesione (150→200) - najdalsza
+  // warstwa sięga teraz najwyżej, spójnie z bliższymi.
+  addLayer(Math.max(25, Math.round(85 * density)), 480, 650, 70, 200, 0.42, 8, 20, 11, 19);
 
   group.userData.matrixColumns = columns;
 
