@@ -126,6 +126,33 @@ function buryBelowFloor(rand, visibleHeight, minBuried, maxBuried) {
   return { centerY, totalHeight };
 }
 
+// --- Miękka tekstura "diody" (współdzielona, budowana raz) ----------------
+// Zamiast twardego, prostokątnego boxa (poprzednia wersja) - okrągły,
+// gasnący ku brzegom gradient (ta sama sztuczka co sprite cząsteczek w
+// Effects.js/getParticleSpriteTexture), naciągnięty na płaską geometrię
+// (patrz addBuildingDiodes -> InstancedMesh niżej) na eliptyczny kształt
+// panelu dzięki niejednorodnej skali instancji. Efekt: realne, miękkie
+// "światełko" z bloomem, a nie kafelek z ostrą krawędzią.
+let sharedDiodeGlowTexture = null;
+function getDiodeGlowTexture() {
+  if (sharedDiodeGlowTexture) return sharedDiodeGlowTexture;
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const c = size / 2;
+  const gradient = ctx.createRadialGradient(c, c, 0, c, c, c);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.35, 'rgba(255,255,255,0.85)');
+  gradient.addColorStop(0.7, 'rgba(255,255,255,0.28)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  sharedDiodeGlowTexture = new THREE.CanvasTexture(canvas);
+  return sharedDiodeGlowTexture;
+}
+
 // === TRON CLASSIC: centra danych / superkomputery ==========================
 // Trzy warstwy prostopadłościennych "serwerowni" w pierścieniu wokół areny
 // (bliska/średnia/daleka - więcej warstw niż wcześniej = więcej głębi),
@@ -478,10 +505,16 @@ function buildClassicBackground(density = 1) {
   // do wszystkich 195 budynków powyżej (zwykle ~1800-2400 - maksymalnie
   // dużo, bez sztywnego limitu narzuconego z góry). ---
   const lightCount = diodeRecords.length;
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  // PlaneGeometry + miękka teksturowana poświata (getDiodeGlowTexture)
+  // zamiast BoxGeometry - diody renderują się teraz jako gasnące ku
+  // brzegom plamki światła, nie twarde prostokąty. side: DoubleSide, bo
+  // przy skrajnych kątach kamery (bardzo blisko/pod ścianą) mogłaby się
+  // pojawić od tyłu płaszczyzny, w przeciwieństwie do boxa, który zawsze
+  // miał widoczną ściankę z obu stron.
+  const geometry = new THREE.PlaneGeometry(1, 1);
   const material = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.95,
-    blending: THREE.AdditiveBlending, depthWrite: false, fog: false, vertexColors: true
+    color: 0xffffff, map: getDiodeGlowTexture(), transparent: true, opacity: 0.95,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false, vertexColors: true, side: THREE.DoubleSide
   });
   const lights = new THREE.InstancedMesh(geometry, material, lightCount);
   const dummy = new THREE.Object3D();
@@ -490,7 +523,9 @@ function buildClassicBackground(density = 1) {
   for (let i = 0; i < lightCount; i++) {
     const rec = diodeRecords[i];
     dummy.position.set(rec.x, rec.y, rec.z);
-    dummy.scale.set(rec.s, rec.s * 0.42, 0.12);
+    // Bez skali Z (0.12 dawniej dla grubości boxa) - płaszczyzna nie ma
+    // głębi, sama tekstura daje wrażenie miękkiej poświaty zamiast krawędzi.
+    dummy.scale.set(rec.s, rec.s * 0.42, 1);
     dummy.rotation.y = rec.rotY;
     dummy.updateMatrix();
     lights.setMatrixAt(i, dummy.matrix);
@@ -967,7 +1002,13 @@ function buildSynthwaveBackground() {
   // pod różnymi kątami względem areny, nie są ustawione w rządku. Paleta
   // spójna niebiesko-cyjanowa (dwa bliskie odcienie błękitu) - zgodnie ze
   // specyfikacją (kolor_linii: #00bfff).
-  disposeAwareAdd(group, buildRidge(260, 16, 0x00bfff, 46));
+  // Grzbiet NAJBLIŻSZY arenie dostaje ciepły, różowo-fioletowy odcień
+  // (0xff5fa8) zamiast chłodnego błękitu - klasyczny synthwave kontrastuje
+  // ciepły pierwszy plan (blisko słońca) z chłodniejszymi, dalszymi
+  // pasmami. Reszta zostaje w spójnej niebiesko-cyjanowej palecie -
+  // stopniowe przejście od ciepła do chłodu wraz z odległością daje więcej
+  // głębi kolorystycznej niż jednolity błękit wszędzie.
+  disposeAwareAdd(group, buildRidge(260, 16, 0xff5fa8, 46));
   disposeAwareAdd(group, buildRidge(320, 30, 0x2f9eff, 62));
   disposeAwareAdd(group, buildRidge(400, 46, 0x00bfff, 74));
   disposeAwareAdd(group, buildRidge(480, 60, 0x2f9eff, 50));
@@ -1016,12 +1057,40 @@ function buildMatrixCharacterTexture(rand, charSize = 26) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
+  // Grupowanie znaków w cykliczne "komety" (jasne czoło -> gasnący ogon)
+  // zamiast jednolicie losowej jasności każdego znaku z osobna. groupSize
+  // znaków = jeden cykl; że tekstura powtarza się wiele razy wzdłuż
+  // strumienia (repeat.set w addLayer niżej), na całej wysokości powstaje
+  // kilka takich "komet" naraz, przesuwających się razem z przewijaniem
+  // offsetu (updateMatrixBackground) - to właśnie daje wrażenie realnie
+  // PRZESUWAJĄCYCH SIĘ znaków z wyraźnym czołem, a nie jednostajnego
+  // skrzenia. trailFactor=1 na czole komety, opada do ~0 na jej końcu.
+  const groupSize = 5 + Math.floor(rand() * 3); // 5-7 znaków na cykl
+  let posInGroup = 0;
   for (let y = charSize / 2; y < canvas.height; y += charSize) {
     const ch = chars[Math.floor(rand() * chars.length)];
-    const bright = rand();
-    ctx.fillStyle = bright < 0.15 ? '#eaffea' : '#3dff6e';
-    ctx.globalAlpha = 0.72 + rand() * 0.28;
+    const trailFactor = Math.pow(1 - posInGroup / groupSize, 2.2);
+    const isHead = posInGroup === 0;
+
+    if (isHead) {
+      // Czoło komety: jaśniejszy kolor + delikatna poświata (shadowBlur,
+      // tania w canvas 2D) - najbardziej "żywy" punkt cyklu.
+      ctx.fillStyle = '#eaffea';
+      ctx.shadowColor = '#aaffcc';
+      ctx.shadowBlur = charSize * 0.5;
+      ctx.globalAlpha = 0.95 + rand() * 0.05;
+    } else {
+      ctx.shadowBlur = 0;
+      const bright = rand();
+      ctx.fillStyle = bright < 0.08 ? '#eaffea' : '#3dff6e';
+      // Baza jasności skalowana trailFactor (gasnący ogon), z minimalnym
+      // podłogowym poziomem (0.1), żeby ogon nie znikał do zera nagle.
+      ctx.globalAlpha = Math.max(0.1, trailFactor) * (0.75 + rand() * 0.25);
+    }
     ctx.fillText(ch, canvas.width / 2, y);
+    ctx.shadowBlur = 0;
+
+    posInGroup = (posInGroup + 1) % groupSize;
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
