@@ -19,6 +19,16 @@ import { sweepCells, cellsHitDanger, minDistanceToDanger } from './collision.js'
 // z tą wartością.
 const BASE_PLAYER_SPEED = 10;
 
+// Multiplayer: co ile milisekund gracz wysyła WŁASNĄ pozycję/kierunek do
+// przeciwnika przez kanał 'game-state-update', żeby ten mógł skorygować
+// swój lokalny model naszego ruchu (patrz RemotePlayer.js#applyRemoteState
+// i netSync.js po uzasadnienie i algorytm korekty). 400ms to kompromis:
+// wystarczająco często, żeby dryf nie zdążył urosnąć do czegoś
+// zauważalnego, wystarczająco rzadko, żeby nie zapychać socketu (2.5
+// wiadomości/s na gracza, dużo mniej niż zdarzenia skrętu i tak już
+// wysyłane na bieżąco).
+const RESYNC_INTERVAL_MS = 400;
+
 export class Game {
   constructor(scene, camera) {
     this.scene = scene;
@@ -38,6 +48,7 @@ export class Game {
     this._gridBounds = 45;
     this._currentDifficulty = 'medium';
     this._autoRestartTimer = null;
+    this._resyncElapsedMs = 0;
 
     // --- Multiplayer ---
     // multiplayerManager jest przypisywany z zewnątrz (main.js), Game.js nie
@@ -180,6 +191,7 @@ export class Game {
     
     this.isMultiplayer = true;
     this.isHost = isHost;
+    this._resyncElapsedMs = 0;
     
     this.audioManager.init();
     
@@ -485,7 +497,24 @@ export class Game {
         }
       }
       this._playerSweptCells = playerSweep; // użyte w checkCollisions() poniżej
-      
+
+      // --- Multiplayer: resync okresowy (patrz RESYNC_INTERVAL_MS wyżej) ---
+      // Wysyłamy WŁASNĄ pozycję/kierunek - to przeciwnik u siebie zdecyduje,
+      // czy i jak skorygować swój lokalny model NAS (patrz
+      // RemotePlayer.js#applyRemoteState). Nie czekamy na ewentualną
+      // odpowiedź - to jednokierunkowy, rozgłoszeniowy strumień, symetryczny
+      // po obu stronach.
+      if (this.isMultiplayer && this.multiplayerManager) {
+        this._resyncElapsedMs += deltaTime * 1000;
+        if (this._resyncElapsedMs >= RESYNC_INTERVAL_MS) {
+          this._resyncElapsedMs = 0;
+          this.multiplayerManager.sendGameState({
+            position: { x: this.player.position.x, z: this.player.position.z },
+            direction: { x: this.player.direction.x, z: this.player.direction.z }
+          });
+        }
+      }
+
       // Aktualizuj AI
       const lastOpponentPos = this.opponent.position.clone();
       const lastOpponentDir = this.opponent.direction.clone();

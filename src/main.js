@@ -212,7 +212,7 @@ scene.add(grid.mesh);
   }
 
   multiplayerManager.onPlayerJoined = () => {
-    lobbyUI.showStartButton();
+    lobbyUI.showStartButton(multiplayerManager.isHost);
   };
 
   multiplayerManager.onPlayerLeft = () => {
@@ -232,6 +232,15 @@ scene.add(grid.mesh);
   multiplayerManager.onPlayerInput = (data) => {
     if (game.opponent && typeof game.opponent.applyRemoteInput === 'function') {
       game.opponent.applyRemoteInput(data.action);
+    }
+  };
+
+  // Korekta dryfu (patrz Game.js#update, RESYNC_INTERVAL_MS oraz
+  // RemotePlayer.js#applyRemoteState) - przeciwnik okresowo przysyła własną
+  // pozycję/kierunek, my dociągamy do tego nasz lokalny model jego ruchu.
+  multiplayerManager.onGameStateUpdate = (state) => {
+    if (game.opponent && typeof game.opponent.applyRemoteState === 'function') {
+      game.opponent.applyRemoteState(state);
     }
   };
 

@@ -174,13 +174,20 @@ io.on('connection', (socket) => {
     });
   });
   
-  // Aktualizacja stanu gry (tylko host wysyła)
+  // Aktualizacja stanu gry - korekta dryfu pozycji przeciwnika (patrz
+  // Game.js#update / RemotePlayer.js#applyRemoteState). Celowo NIE
+  // ograniczone do hosta: obie strony wysyłają okresowo swoją WŁASNĄ
+  // pozycję, żeby druga strona mogła skorygować swój lokalny model tego
+  // gracza. To bezpieczne rozluźnienie względem poprzedniej wersji
+  // (tylko host) - kanał ten i tak nigdy nie decyduje o WYNIKU rundy (ten
+  // ustala wyłącznie lokalna detekcja kolizji każdego klienta), więc
+  // dopuszczenie obu graczy do wysyłania niczego tu nie osłabia.
   socket.on('game-state-update', (data) => {
     if (!data || !isValidRoomId(data.roomId)) return;
     const room = rooms.get(data.roomId);
-    if (!room || room.host !== socket.id) return;
+    if (!room || !room.players.includes(socket.id)) return;
     
-    // Przekaż stan gry do innych graczy
+    // Przekaż stan gry do innych graczy w pokoju
     socket.to(data.roomId).emit('game-state-update', data.gameState);
   });
   

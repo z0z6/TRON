@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Trail } from './Trail.js';
 import { createLightCycleMesh } from './LightCycleModel.js';
+import { reconcilePosition } from './netSync.js';
 
 /**
  * Przeciwnik sterowany przez sieć - odpowiednik AI.js dla trybu multiplayer.
@@ -11,14 +12,18 @@ import { createLightCycleMesh } from './LightCycleModel.js';
  * przez applyRemoteInput(), wywoływane z main.js po odebraniu zdarzenia
  * 'player-input' od przeciwnika przez WebSocket.
  *
- * WAŻNE OGRANICZENIE (świadomy kompromis, nie przeoczenie): to prosty model
- * peer-to-peer BEZ pełnej rekoncyliacji stanu. Obie strony symulują ruch
- * deterministycznie (stała prędkość) od tego samego punktu startowego,
- * synchronizując się wyłącznie zdarzeniami skrętu. Przy słabym połączeniu
- * lub dłuższym meczu możliwy jest niewielki dryf pozycji między stronami.
- * To NIE jest netcode klasy turniejowej - do pełnej synchronizacji
- * potrzebny byłby okresowy resync przez kanał 'game-state-update' (host),
- * który serwer już obsługuje, ale klient go jeszcze nie wykorzystuje.
+ * Model ruchu: obie strony symulują ruch deterministycznie (stała
+ * prędkość) i synchronizują kierunek zdarzeniami skrętu. Same zdarzenia
+ * skrętu wystarczają w teorii do idealnej synchronizacji, ale w praktyce
+ * małe różnice w deltaTime między przeglądarkami/urządzeniami mogą
+ * kumulować niewielki dryf pozycji w dłuższym meczu. Dlatego obie strony
+ * DODATKOWO okresowo wysyłają swoją własną, "prawdziwą" pozycję przez
+ * kanał 'game-state-update' (patrz Game.js#update, RESYNC_INTERVAL_MS) -
+ * applyRemoteState() poniżej odbiera to u przeciwnika i płynnie koryguje
+ * lokalną symulację w jego stronę (patrz netSync.js po szczegóły algorytmu
+ * korekty). To wciąż nie jest netcode klasy turniejowej z pełną
+ * rekoncyliacją i przewidywaniem ruchu, ale usuwa akumulujący się dryf bez
+ * gwałtownych skoków na ekranie.
  */
 export class RemotePlayer {
   constructor(scene, startPosition, color = 0xff00ff) {
@@ -73,6 +78,38 @@ export class RemotePlayer {
     if (newDir) {
       this.direction.copy(newDir);
       this.mesh.rotation.y = Math.atan2(newDir.x, newDir.z);
+    }
+  }
+
+  /**
+   * Wywoływane z main.js po odebraniu 'game-state-update' od przeciwnika
+   * przez WebSocket (patrz Game.js#update, gdzie druga strona okresowo
+   * WYSYŁA tę samą strukturę o SOBIE). state = { position: {x,z},
+   * direction: {x,z} } - dokładnie to, co druga strona wie o sobie
+   * najlepiej, więc traktujemy to jako "prawdę" do której dociągamy naszą
+   * lokalną symulację (patrz netSync.js po algorytm korekty).
+   */
+  applyRemoteState(state) {
+    if (!this.visible || !state || !state.position) return;
+
+    const corrected = reconcilePosition(
+      { x: this.position.x, z: this.position.z },
+      state.position
+    );
+    this.position.x = corrected.x;
+    this.position.z = corrected.z;
+    this.mesh.position.copy(this.position);
+
+    // Kierunek jest już zsynchronizowany zdarzeniami skrętu
+    // (applyRemoteInput) - to tylko zabezpieczenie na wypadek, gdyby
+    // pojedyncze zdarzenie 'player-input' zgubiło się w sieci i lokalny
+    // kierunek się rozjechał z rzeczywistym.
+    if (state.direction) {
+      const { x, z } = state.direction;
+      if (x !== this.direction.x || z !== this.direction.z) {
+        this.direction.set(x, 0, z);
+        this.mesh.rotation.y = Math.atan2(x, z);
+      }
     }
   }
 

@@ -121,9 +121,12 @@ export class MultiplayerManager {
     });
   }
 
-  // Wyślij stan gry (tylko host)
+  // Wyślij stan gry - okresowa, WŁASNA pozycja/kierunek do korekty dryfu
+  // po stronie przeciwnika (patrz Game.js#update / RemotePlayer.js
+  // #applyRemoteState). Obie strony wywołują to, nie tylko host - server.js
+  // od tej wersji przekazuje to dalej niezależnie od roli nadawcy.
   sendGameState(gameState) {
-    if (!this.isConnected || !this.roomId || !this.isHost) return;
+    if (!this.isConnected || !this.roomId) return;
     
     this.socket.emit('game-state-update', {
       roomId: this.roomId,
