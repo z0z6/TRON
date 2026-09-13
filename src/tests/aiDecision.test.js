@@ -38,34 +38,46 @@ describe('isCellFree', () => {
 });
 
 describe('getTurnDirection', () => {
+  // Ta funkcja MUSI być identyczna z Game.js#turnPlayer i RemotePlayer.js
+  // #_turn (patrz komentarz nad getTurnDirection w aiDecision.js) - to
+  // trzecia, niezależna kopia tej samej logiki skrętu. Wcześniej gałęzie
+  // dla osi Z były tu przypadkiem zamienione między left/right (naprawiony
+  // bug, patrz rozmowa/CHANGES.md) - poniższe testy sprawdzają teraz
+  // POPRAWNĄ, spójną rotację o 90°, zgodną z resztą gry.
   it('turns left from every cardinal direction', () => {
     expect(getTurnDirection({ x: 1, z: 0 }, 'left')).toEqual({ x: 0, z: -1 });
     expect(getTurnDirection({ x: -1, z: 0 }, 'left')).toEqual({ x: 0, z: 1 });
-    expect(getTurnDirection({ x: 0, z: 1 }, 'left')).toEqual({ x: -1, z: 0 });
-    expect(getTurnDirection({ x: 0, z: -1 }, 'left')).toEqual({ x: 1, z: 0 });
+    expect(getTurnDirection({ x: 0, z: 1 }, 'left')).toEqual({ x: 1, z: 0 });
+    expect(getTurnDirection({ x: 0, z: -1 }, 'left')).toEqual({ x: -1, z: 0 });
   });
 
   it('turns right from every cardinal direction', () => {
     expect(getTurnDirection({ x: 1, z: 0 }, 'right')).toEqual({ x: 0, z: 1 });
     expect(getTurnDirection({ x: -1, z: 0 }, 'right')).toEqual({ x: 0, z: -1 });
-    expect(getTurnDirection({ x: 0, z: 1 }, 'right')).toEqual({ x: 1, z: 0 });
-    expect(getTurnDirection({ x: 0, z: -1 }, 'right')).toEqual({ x: -1, z: 0 });
+    expect(getTurnDirection({ x: 0, z: 1 }, 'right')).toEqual({ x: -1, z: 0 });
+    expect(getTurnDirection({ x: 0, z: -1 }, 'right')).toEqual({ x: 1, z: 0 });
   });
 
-  // UWAGA - to NIE jest test na "left cofnięte przez right wraca do startu".
-  // Rzeczywista logika (skopiowana 1:1 z AI.js/Game.js/RemotePlayer.js) tego
-  // nie gwarantuje - left/right to każde z osobna INWOLUCJA (dwa niezależne
-  // swapy par kierunków), a nie spójna rotacja o 90° w jedną stronę, więc
-  // right(left(x)) daje kierunek PRZECIWNY do x, nie x z powrotem. To
-  // działający, ale nieoczywisty szczegół istniejącej gry (patrz rozmowa) -
-  // ten test dokumentuje RZECZYWISTE zachowanie, żeby przyszła zmiana w
-  // AI.js/Game.js/RemotePlayer.js, która by to naruszyła, została złapana
-  // przez testy, zamiast po cichu zmienić działanie gry.
-  it('composes left then right into the OPPOSITE direction, not back to start (documents existing behavior)', () => {
+  it('composes left then right back into the original direction (proper rotation, inverse operations)', () => {
     const start = { x: 1, z: 0 };
     const left = getTurnDirection(start, 'left');
     const backToStart = getTurnDirection(left, 'right');
-    expect(backToStart).toEqual({ x: -1, z: 0 });
+    expect(backToStart).toEqual(start);
+  });
+
+  it('turning left four times in a row cycles through all 4 cardinal directions and returns to start', () => {
+    let dir = { x: 1, z: 0 };
+    const seen = [dir];
+    for (let i = 0; i < 3; i++) {
+      dir = getTurnDirection(dir, 'left');
+      seen.push(dir);
+    }
+    const final = getTurnDirection(dir, 'left');
+    expect(final).toEqual({ x: 1, z: 0 }); // wraca do startu dopiero po 4 skrętach
+    // Po drodze odwiedza WSZYSTKIE 4 kierunki, nie tylko 2 (to właśnie było
+    // złamane w starym, buggy getTurnDirection - utykało w cyklu długości 2).
+    const uniqueKeys = new Set(seen.map((d) => `${d.x},${d.z}`));
+    expect(uniqueKeys.size).toBe(4);
   });
 });
 
