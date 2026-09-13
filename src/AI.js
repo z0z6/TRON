@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Trail } from './Trail.js';
 import { createLightCycleMesh } from './LightCycleModel.js';
 import { debugLog } from './debug.js';
+import { isCellFree, getTurnDirection, countReachableSpace, decideDirection } from './aiDecision.js';
 
 // Parametry per poziom trudności, użyte w makeDecision() poniżej.
 // - lookahead: sufit BFS w countReachableSpace - jak "daleko" AI widzi, że
@@ -63,61 +64,25 @@ export class AI {
     return `${Math.floor(x)},${Math.floor(z)}`;
   }
 
+  // Deleguje do aiDecision.js (patrz tests/aiDecision.test.js) - logika
+  // bez zmian, tylko wydzielona, żeby dało się ją testować bez tworzenia
+  // prawdziwej instancji AI (constructor ładuje model GLTF asynchronicznie
+  // z dysku/sieci, patrz LightCycleModel.js).
   isCellFree(x, z, playerTrail, aiTrail) {
-    const key = this.getGridKey(x, z);
-    const gridSize = 45;
-    
-    if (Math.abs(x) > gridSize || Math.abs(z) > gridSize) {
-      return false;
-    }
-    
-    if (playerTrail && playerTrail.has(key)) return false;
-    if (aiTrail && aiTrail.has(key)) return false;
-    
-    return true;
+    return isCellFree(x, z, playerTrail, aiTrail);
   }
 
   getTurnDirection(currentDir, turn) {
-    if (turn === 'left') {
-      if (currentDir.x === 1) return new THREE.Vector3(0, 0, -1);
-      if (currentDir.x === -1) return new THREE.Vector3(0, 0, 1);
-      if (currentDir.z === 1) return new THREE.Vector3(-1, 0, 0);
-      if (currentDir.z === -1) return new THREE.Vector3(1, 0, 0);
-    } else {
-      if (currentDir.x === 1) return new THREE.Vector3(0, 0, 1);
-      if (currentDir.x === -1) return new THREE.Vector3(0, 0, -1);
-      if (currentDir.z === 1) return new THREE.Vector3(1, 0, 0);
-      if (currentDir.z === -1) return new THREE.Vector3(-1, 0, 0);
-    }
-    return currentDir.clone();
+    const result = getTurnDirection(currentDir, turn);
+    return new THREE.Vector3(result.x, 0, result.z);
   }
 
   // Zlicza liczbę pustych, osiągalnych pól (BFS) od danego punktu - daje AI
   // realne "wyczucie przestrzeni" zamiast reagowania tylko na przeszkodę
-  // dosłownie przed nosem. `limit` to twardy sufit liczby odwiedzonych pól
-  // (wydajność) - nie musimy znać DOKŁADNEJ wielkości otwartej przestrzeni,
-  // tylko z grubsza porównać kandydatów względem siebie.
+  // dosłownie przed nosem. Patrz aiDecision.js#countReachableSpace po
+  // pełny komentarz o algorytmie.
   countReachableSpace(startX, startZ, playerTrail, aiTrail, limit = 400) {
-    const visited = new Set();
-    const startKey = this.getGridKey(startX, startZ);
-    visited.add(startKey);
-    const stack = [[Math.floor(startX), Math.floor(startZ)]];
-    let count = 0;
-
-    while (stack.length > 0 && count < limit) {
-      const [x, z] = stack.pop();
-      count++;
-
-      const neighbors = [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]];
-      for (const [nx, nz] of neighbors) {
-        const key = `${nx},${nz}`;
-        if (visited.has(key)) continue;
-        if (!this.isCellFree(nx, nz, playerTrail, aiTrail)) continue;
-        visited.add(key);
-        stack.push([nx, nz]);
-      }
-    }
-    return count;
+    return countReachableSpace(startX, startZ, playerTrail, aiTrail, limit);
   }
 
   makeDecision(playerPosition, playerTrail, aiTrail) {
@@ -144,57 +109,18 @@ export class AI {
     }
     this._lastSmartDecision = now;
 
-    const leftDir = this.getTurnDirection(this.direction, 'left');
-    const rightDir = this.getTurnDirection(this.direction, 'right');
-    const candidates = [
-      { turn: null, dir: this.direction },
-      { turn: 'left', dir: leftDir },
-      { turn: 'right', dir: rightDir }
-    ];
-
-    const scored = [];
-    for (const c of candidates) {
-      const landing = this.position.clone().add(c.dir.clone().multiplyScalar(nearAheadDist));
-      if (!this.isCellFree(landing.x, landing.z, playerTrail, aiTrail)) continue;
-
-      const space = this.countReachableSpace(landing.x, landing.z, playerTrail, aiTrail, this.settings.lookahead);
-
-      // chaseWeight>0 (medium/hard): premia za zbliżanie się do gracza, żeby
-      // AI aktywnie ścigało/odcinało zamiast tylko unikać własnej śmierci.
-      // Liczona jako "o ile ten kandydat skraca dystans do gracza względem
-      // obecnej pozycji" - ujemna wartość (oddalanie się) obniża wynik.
-      const currentDistToPlayer = this.position.distanceTo(playerPosition);
-      const landingDistToPlayer = landing.distanceTo(playerPosition);
-      const chaseBonus = (currentDistToPlayer - landingDistToPlayer) * this.settings.chaseWeight;
-
-      // Niewielka premia za jazdę na wprost, żeby przy remisach przestrzeni
-      // AI nie skręcało bez potrzeby (mniej "szarpane", bardziej naturalne
-      // ruchy) - ale to tylko remisołamacz, przestrzeń zawsze wygrywa.
-      const score = space + (c.turn === null ? 2 : 0) + chaseBonus;
-      scored.push({ turn: c.turn, score });
-    }
-
-    if (scored.length === 0) {
-      // Żaden kierunek nie jest bezpieczny - nieunikniona śmierć, jedziemy
-      // dalej (i tak już nic nie pomoże).
-      return null;
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-
-    // mistakeChance (głównie easy): w sytuacji NIE-nagłej, zamiast zawsze
-    // brać najlepszy wynik, z pewnym prawdopodobieństwem AI bierze losowego
-    // z bezpiecznych kandydatów - stąd "łatwy" przeciwnik czasem skręca w
-    // gorszą stronę, mimo że widział lepszą opcję. W sytuacji nagłej
-    // (needsUrgentDecision) ten margines błędu jest wyłączony - inaczej AI
-    // na easy potrafiłoby świadomie wjechać w przeszkodę tuż przed sobą,
-    // co wygląda na zepsute sterowanie, nie na "łatwy poziom".
-    if (!needsUrgentDecision && this.settings.mistakeChance > 0 && Math.random() < this.settings.mistakeChance) {
-      const randomPick = scored[Math.floor(Math.random() * scored.length)];
-      return randomPick.turn;
-    }
-
-    return scored[0].turn;
+    // Sama ocena kandydatów i wybór (łącznie z chaseWeight/mistakeChance) -
+    // patrz aiDecision.js#decideDirection po pełny komentarz.
+    return decideDirection({
+      position: this.position,
+      direction: this.direction,
+      playerPosition,
+      playerTrail,
+      aiTrail,
+      settings: this.settings,
+      needsUrgentDecision,
+      nearAheadDist
+    });
   }
 
   update(deltaTime, playerPosition, playerTrail, aiTrail) {

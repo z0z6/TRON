@@ -180,6 +180,33 @@ scene.add(grid.mesh);
   });
 
   // --- Multiplayer ---
+
+  // Lekki, samodzielny pasek statusu połączenia - używany zarówno dla
+  // WŁASNEGO zerwania połączenia (próba automatycznego powrotu, patrz
+  // MultiplayerManager.js#_attemptRejoin), jak i informacji o przeciwniku
+  // (patrz RECONNECT_GRACE_MS w server.js). Celowo NIE reużywa toastHud -
+  // ten jest w całości sterowany przez pętlę animacji na podstawie
+  // scoringSystem.floatingTexts (patrz updateScoreHud niżej) i nadpisywałby
+  // ten komunikat na następnej klatce.
+  let connectionBannerEl = null;
+  function showConnectionBanner(text) {
+    if (!connectionBannerEl) {
+      connectionBannerEl = document.createElement('div');
+      connectionBannerEl.style.cssText = `
+        position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,0.8); color: #ff9900; border: 1px solid #ff9900;
+        padding: 8px 18px; border-radius: 6px; font-family: 'Courier New', monospace;
+        font-size: 14px; z-index: 1000; pointer-events: none; text-align: center;
+      `;
+      document.body.appendChild(connectionBannerEl);
+    }
+    connectionBannerEl.textContent = text;
+    connectionBannerEl.style.display = 'block';
+  }
+  function hideConnectionBanner() {
+    if (connectionBannerEl) connectionBannerEl.style.display = 'none';
+  }
+
   const multiplayerManager = new MultiplayerManager();
   const lobbyUI = new LobbyUI(multiplayerManager);
   game.multiplayerManager = multiplayerManager;
@@ -216,6 +243,7 @@ scene.add(grid.mesh);
   };
 
   multiplayerManager.onPlayerLeft = () => {
+    hideConnectionBanner();
     lobbyUI.updateStatus('Przeciwnik opuścił pokój.');
     // Jeśli mecz trwał, a przeciwnik zniknął z sieci - traktujemy to jak
     // automatyczną wygraną (nie ma z kim dalej grać).
@@ -224,7 +252,40 @@ scene.add(grid.mesh);
     }
   };
 
+  // Reconnect (patrz MultiplayerManager.js#_attemptRejoin i
+  // RECONNECT_GRACE_MS w server.js) - krótki zanik wifi/sieci w trakcie
+  // meczu NIE kończy już gry natychmiast, tylko pokazuje status i daje
+  // socket.io chwilę na samodzielny powrót do tego samego pokoju.
+  multiplayerManager.onConnectionLost = () => {
+    if (game.isMultiplayer && game.isStarted && !game.gameOver) {
+      showConnectionBanner('Connection lost - reconnecting...');
+    }
+  };
+
+  multiplayerManager.onReconnected = () => {
+    hideConnectionBanner();
+  };
+
+  multiplayerManager.onReconnectFailed = () => {
+    // Okno na powrót minęło po stronie serwera - nie ma już do czego
+    // wracać. Bez confirm() (to nie decyzja gracza, więc nie pytamy) -
+    // po prostu informujemy i wracamy do menu.
+    showConnectionBanner('Could not reconnect. Returning to menu...');
+    setTimeout(() => { window.location.href = '../index.html'; }, 2500);
+  };
+
+  multiplayerManager.onOpponentDisconnected = () => {
+    if (game.isMultiplayer && game.isStarted && !game.gameOver) {
+      showConnectionBanner('Opponent connection lost - waiting...');
+    }
+  };
+
+  multiplayerManager.onOpponentReconnected = () => {
+    hideConnectionBanner();
+  };
+
   multiplayerManager.onGameStart = () => {
+    hideConnectionBanner();
     lobbyUI.hide();
     game.startMultiplayer(multiplayerManager.isHost);
   };

@@ -51,6 +51,16 @@ function isValidAction(action) {
   return typeof action === 'string' && ALLOWED_ACTIONS.has(action);
 }
 
+// Token nieprzewidywalny na tyle, żeby obcy socket nie mógł go zgadnąć i
+// "przejąć" cudzego miejsca w pokoju przez rejoin-room (patrz niżej) - nie
+// musi być kryptograficznie idealny (to wciąż tylko gra dla dwóch osób w
+// jednym pokoju, nie system uwierzytelniania), ale zwykły
+// Math.random().toString(36) użyty już do roomId byłby za krótki/za łatwy
+// do obserwacji przy wielu próbach.
+function generateReconnectToken() {
+  return Array.from({ length: 4 }, () => Math.random().toString(36).slice(2, 10)).join('');
+}
+
 // Bardzo prosty token-bucket per socket, tylko dla 'create-room' (najbardziej
 // oczywisty wektor spamu: tanie w wywołaniu, tworzy stan na serwerze).
 // Nieproporcjonalnie prostszy niż pełny rate-limiter, ale wystarcza, żeby
@@ -58,6 +68,14 @@ function isValidAction(action) {
 const ROOM_CREATE_LIMIT = 5;
 const ROOM_CREATE_WINDOW_MS = 60 * 1000;
 const roomCreateTimestamps = new Map(); // socket.id -> number[]
+
+// Ile czasu (ms) pokój "trzyma miejsce" dla gracza, którego socket się
+// rozłączył (chwilowy zanik wifi, telefon zablokowany na chwilę, zakładka
+// w tle uśpiona przez system) - patrz duży komentarz przy socket.on('disconnect').
+// 20s to kompromis: wystarczająco długo na typowy krótki zanik sieci,
+// wystarczająco krótko, żeby drugi gracz nie czekał w nieskończoność na
+// kogoś, kto faktycznie już sobie poszedł.
+const RECONNECT_GRACE_MS = Number(process.env.RECONNECT_GRACE_MS) || 20 * 1000;
 
 function isRoomCreateRateLimited(socketId) {
   const now = Date.now();
@@ -83,6 +101,31 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'tron-multiplayer-server', rooms: rooms.size });
 });
 
+// Jedyne miejsce, które WYKONUJE faktyczne, ostateczne opuszczenie pokoju:
+// emituje prawdziwe 'player-left' (to ten sygnał main.js/Game.js traktuje
+// jako koniec meczu, patrz onPlayerLeft), usuwa gracza z listy, czyści jego
+// token i - jeśli trzeba - usuwa pusty pokój albo przekazuje rolę hosta.
+// Wywoływane zarówno z jawnego 'leave-room' (natychmiast, bez okresu
+// karencji - to świadoma decyzja gracza, nie zanik sieci), jak i z timera
+// karencji po zerwaniu połączenia (patrz socket.on('disconnect') niżej).
+function removePlayerFromRoom(roomId, socketId) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  room.players = room.players.filter((id) => id !== socketId);
+  room.tokens.delete(socketId);
+
+  io.to(roomId).emit('player-left', { playerId: socketId });
+
+  if (room.players.length === 0) {
+    rooms.delete(roomId);
+    debugLog(`Room ${roomId} deleted (empty)`);
+  } else if (room.host === socketId) {
+    room.host = room.players[0];
+    debugLog(`Host transferred to ${room.host} in room ${roomId}`);
+  }
+}
+
 io.on('connection', (socket) => {
   debugLog('Player connected:', socket.id);
   
@@ -96,11 +139,14 @@ io.on('connection', (socket) => {
     }
 
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const token = generateReconnectToken();
     
     rooms.set(roomId, {
       id: roomId,
       host: socket.id,
       players: [socket.id],
+      tokens: new Map([[socket.id, token]]), // socket.id -> reconnect token (patrz rejoin-room)
+      pendingDisconnects: new Map(), // reconnect token -> { socketId, timer } dla graczy w oknie karencji
       gameState: 'waiting',
       createdAt: Date.now()
     });
@@ -111,7 +157,8 @@ io.on('connection', (socket) => {
     
     callback({
       success: true,
-      roomId: roomId
+      roomId: roomId,
+      token
     });
   });
   
@@ -142,6 +189,8 @@ io.on('connection', (socket) => {
     }
     
     room.players.push(socket.id);
+    const token = generateReconnectToken();
+    room.tokens.set(socket.id, token);
     socket.join(data.roomId);
     
     debugLog(`Player ${socket.id} joined room ${data.roomId}`);
@@ -154,7 +203,62 @@ io.on('connection', (socket) => {
     callback({
       success: true,
       roomId: data.roomId,
-      host: room.host
+      host: room.host,
+      token
+    });
+  });
+  
+  // Powrót po zerwaniu połączenia (patrz socket.on('disconnect') niżej i
+  // RECONNECT_GRACE_MS) - klient wywołuje to SAM, automatycznie, zaraz po
+  // tym jak socket.io samo odtworzy transport (patrz _attemptRejoin() w
+  // MultiplayerManager.js), używając tokena zapamiętanego przy
+  // create-room/join-room. Nowy socket.id zastępuje stary wszędzie w
+  // pokoju - z punktu widzenia drugiego gracza to ten sam przeciwnik, nie
+  // nowy uczestnik.
+  socket.on('rejoin-room', (data, callback) => {
+    if (typeof callback !== 'function') return;
+
+    if (!data || !isValidRoomId(data.roomId) || typeof data.token !== 'string' || data.token.length > 64) {
+      callback({ success: false, error: 'Invalid rejoin request' });
+      return;
+    }
+
+    const room = rooms.get(data.roomId);
+    if (!room) {
+      callback({ success: false, error: 'Room no longer exists' });
+      return;
+    }
+
+    const pending = room.pendingDisconnects.get(data.token);
+    if (!pending) {
+      // Albo okno karencji już minęło (removePlayerFromRoom już posprzątał
+      // i wysłał prawdziwe 'player-left'), albo token jest po prostu zły -
+      // w obu przypadkach nie ma już do czego wracać.
+      callback({ success: false, error: 'Reconnect window expired' });
+      return;
+    }
+
+    clearTimeout(pending.timer);
+    room.pendingDisconnects.delete(data.token);
+
+    const oldSocketId = pending.socketId;
+    room.players = room.players.map((id) => (id === oldSocketId ? socket.id : id));
+    room.tokens.delete(oldSocketId);
+    room.tokens.set(socket.id, data.token);
+    if (room.host === oldSocketId) {
+      room.host = socket.id;
+    }
+
+    socket.join(data.roomId);
+
+    debugLog(`Player rejoined room ${data.roomId} as ${socket.id} (was ${oldSocketId})`);
+
+    socket.to(data.roomId).emit('opponent-reconnected');
+
+    callback({
+      success: true,
+      roomId: data.roomId,
+      isHost: room.host === socket.id
     });
   });
   
@@ -231,24 +335,11 @@ io.on('connection', (socket) => {
     if (!data || !isValidRoomId(data.roomId)) return;
     const room = rooms.get(data.roomId);
     if (!room) return;
-    
-    room.players = room.players.filter(id => id !== socket.id);
+
     socket.leave(data.roomId);
-    
-    // Powiadom innych graczy
-    socket.to(data.roomId).emit('player-left', {
-      playerId: socket.id
-    });
-    
-    // Usuń pokój jeśli pusty
-    if (room.players.length === 0) {
-      rooms.delete(data.roomId);
-      debugLog(`Room ${data.roomId} deleted (empty)`);
-    } else if (room.host === socket.id) {
-      // Przekaż hosta
-      room.host = room.players[0];
-      debugLog(`Host transferred to ${room.host} in room ${data.roomId}`);
-    }
+    // Jawne, świadome opuszczenie pokoju - NIE przechodzi przez okres
+    // karencji (to nie zerwanie połączenia, gracz naciskał "LEAVE ROOM").
+    removePlayerFromRoom(data.roomId, socket.id);
   });
   
   // Rozłącz
@@ -257,22 +348,32 @@ io.on('connection', (socket) => {
 
     roomCreateTimestamps.delete(socket.id);
 
-    // Usuń gracza ze wszystkich pokoi
     for (const [roomId, room] of rooms.entries()) {
-      if (room.players.includes(socket.id)) {
-        room.players = room.players.filter(id => id !== socket.id);
-        
-        // Powiadom innych graczy
-        socket.to(roomId).emit('player-left', {
-          playerId: socket.id
-        });
-        
-        // Usuń pokój jeśli pusty
-        if (room.players.length === 0) {
-          rooms.delete(roomId);
-          debugLog(`Room ${roomId} deleted (player disconnected)`);
-        }
+      if (!room.players.includes(socket.id)) continue;
+
+      const token = room.tokens.get(socket.id);
+
+      // Sam w pokoju (albo, teoretycznie, brak tokena z jakiegoś powodu) -
+      // nie ma na kogo czekać, usuń jak dawniej, natychmiast.
+      if (room.players.length < 2 || !token) {
+        removePlayerFromRoom(roomId, socket.id);
+        continue;
       }
+
+      debugLog(`Player ${socket.id} lost connection to room ${roomId} - ${RECONNECT_GRACE_MS}ms na powrót`);
+
+      // Miękki sygnał "przeciwnik ma problem z siecią" - main.js NIE
+      // traktuje tego jako koniec meczu (w przeciwieństwie do prawdziwego
+      // 'player-left', wysyłanego dopiero z removePlayerFromRoom, gdy okno
+      // na powrót faktycznie minie).
+      socket.to(roomId).emit('opponent-disconnected');
+
+      const timer = setTimeout(() => {
+        room.pendingDisconnects.delete(token);
+        removePlayerFromRoom(roomId, socket.id);
+      }, RECONNECT_GRACE_MS);
+
+      room.pendingDisconnects.set(token, { socketId: socket.id, timer });
     }
   });
 });
