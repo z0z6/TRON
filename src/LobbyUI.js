@@ -159,7 +159,7 @@ export class LobbyUI {
       try {
         const response = await this.multiplayer.createRoom();
         this.showWaitingRoom(response.roomId);
-      } catch (error) {
+      } catch {
         this.showError('Failed to create room');
       }
     });
@@ -216,16 +216,29 @@ export class LobbyUI {
     this.waitingSection.style.display = 'block';
     
     document.getElementById('room-code-display').textContent = roomCode;
-    
-    // Przycisk startu pokazuje się dopiero po dołączeniu przeciwnika (patrz
-    // showStartButton(), wywoływane z main.js na zdarzenie 'player-joined') -
-    // niezależnie od tego, czy jesteśmy hostem, czy dołączającym.
+
+    // Dla hosta w tym momencie faktycznie nikt jeszcze nie dołączył - tekst
+    // domyślny z HTML ("Waiting for opponent...") jest poprawny. Dla
+    // dołączającego przeciwnik (host) już z definicji istnieje - mylące
+    // byłoby każenie mu "czekać na przeciwnika", skoro to on sam właśnie
+    // dołączył do czyjegoś pokoju.
+    document.getElementById('waiting-status').textContent = isHost
+      ? 'Waiting for opponent...'
+      : 'Joined room! Waiting for host to start...';
+
+    // Przycisk startu pokazuje się hostowi dopiero po dołączeniu przeciwnika
+    // (patrz showStartButton(), wywoływane z main.js na zdarzenie
+    // 'player-joined', które serwer wysyła WYŁĄCZNIE do hosta - patrz
+    // server.js). Dołączający nigdy nie dostaje tego zdarzenia, więc jego
+    // przycisk startu musi zostać ukryty tutaj, na starcie.
     document.getElementById('start-game-btn').style.display = 'none';
   }
 
-  showStartButton() {
-    document.getElementById('start-game-btn').style.display = 'block';
-    document.getElementById('waiting-status').textContent = 'Opponent joined! Ready to start.';
+  showStartButton(isHost = true) {
+    document.getElementById('start-game-btn').style.display = isHost ? 'block' : 'none';
+    document.getElementById('waiting-status').textContent = isHost
+      ? 'Opponent joined! Ready to start.'
+      : 'Opponent joined! Waiting for host to start...';
   }
 
   updateStatus(message) {

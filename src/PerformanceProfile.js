@@ -68,7 +68,7 @@ function detectPerformanceTierUncached() {
       ];
       if (weakGpuMarkers.some((m) => renderer.includes(m))) strongSignals++;
     }
-  } catch (e) {
+  } catch {
     // Brak WebGL albo zablokowane rozszerzenie - po prostu pomijamy ten
     // sygnał, reszta heurystyki i tak działa.
   }
@@ -140,7 +140,6 @@ export function createAdaptiveQualityController({ renderer, composer, bloomPass 
 
     if (bloomPass) bloomPass.enabled = false;
 
-    // eslint-disable-next-line no-console
     console.info('[TRON] Wykryto niski FPS - obniżam jakość renderowania (pixelRatio, bloom).');
   }
 

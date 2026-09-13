@@ -174,7 +174,7 @@ export class AchievementSystem {
     try {
       const saved = JSON.parse(localStorage.getItem('tron-stats'));
       return saved || this.getDefaultStats();
-    } catch (e) {
+    } catch {
       return this.getDefaultStats();
     }
   }

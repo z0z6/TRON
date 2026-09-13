@@ -288,7 +288,7 @@ export class AudioManager {
       if (!voice) continue;
       [voice.osc1, voice.osc2, voice.sub, voice.lfo].forEach((osc) => {
         if (osc) {
-          try { osc.stop(); } catch (e) { /* już zatrzymany - nic się nie dzieje */ }
+          try { osc.stop(); } catch { /* już zatrzymany - nic się nie dzieje */ }
         }
       });
       this.voices[id] = this._emptyVoice();

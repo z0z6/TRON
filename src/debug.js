@@ -19,7 +19,7 @@ export const DEBUG = (() => {
     if (typeof window === 'undefined') return false;
     if (new URLSearchParams(window.location.search).get('debug') === '1') return true;
     return window.localStorage.getItem('tron_debug') === '1';
-  } catch (e) {
+  } catch {
     // Prywatne okno / localStorage zablokowane przez przeglądarkę - po
     // prostu zostajemy przy domyślnym "wyłączone", to nie jest błąd
     // krytyczny dla samej gry.
