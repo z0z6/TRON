@@ -31,17 +31,28 @@ export function isCellFree(x, z, playerTrail, aiTrail, gridSize = GRID_SIZE) {
 }
 
 /** Kierunek {x,z} po skręcie w lewo/prawo z bieżącego kierunku {x,z}. */
+// UWAGA (naprawiony bug, patrz rozmowa/CHANGES.md): gałęzie dla jazdy wzdłuż
+// osi Z były tu kiedyś zamienione między 'left' i 'right' względem
+// referencyjnej, poprawnej implementacji w Game.js#turnPlayer i
+// RemotePlayer.js#_turn (te dwa pliki są ze sobą identyczne i poprawne -
+// realny, spójny cykl przez wszystkie 4 kierunki). Skutek błędu: AI jadące
+// na północ/południe miało DOSŁOWNIE odwrócone pojęcie lewa/prawa względem
+// gracza - nie awarię, ale cichą niespójność w skrętach wzdłuż tej osi.
+// Gałęzie dla osi X były od zawsze poprawne (zgodne z Game.js) - tylko oś Z
+// wymagała poprawki. Ta funkcja MUSI zostać zsynchronizowana z Game.js/
+// RemotePlayer.js przy każdej zmianie - to trzecia, niezależna kopia tej
+// samej logiki (patrz komentarze tam).
 export function getTurnDirection(currentDir, turn) {
   if (turn === 'left') {
     if (currentDir.x === 1) return { x: 0, z: -1 };
     if (currentDir.x === -1) return { x: 0, z: 1 };
-    if (currentDir.z === 1) return { x: -1, z: 0 };
-    if (currentDir.z === -1) return { x: 1, z: 0 };
+    if (currentDir.z === 1) return { x: 1, z: 0 };
+    if (currentDir.z === -1) return { x: -1, z: 0 };
   } else {
     if (currentDir.x === 1) return { x: 0, z: 1 };
     if (currentDir.x === -1) return { x: 0, z: -1 };
-    if (currentDir.z === 1) return { x: 1, z: 0 };
-    if (currentDir.z === -1) return { x: -1, z: 0 };
+    if (currentDir.z === 1) return { x: -1, z: 0 };
+    if (currentDir.z === -1) return { x: 1, z: 0 };
   }
   return { x: currentDir.x, z: currentDir.z };
 }
