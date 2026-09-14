@@ -1122,6 +1122,22 @@
         let gameOverAutoTimer = null;
 
         const GRID_SIZE = 50; // Zwiększona siatka = mniejsze ślady
+
+        // "Skrząca się siatka" - jedyny element dekoracyjny tła poza samą
+        // grą. Kilka STAŁYCH (wylosowanych raz, nie co klatkę) punktów
+        // przecięcia siatki migocze niezależnie w kolorze motywu (theme.p1),
+        // większość czasu niewidocznie - patrz pętla w draw(). Współrzędne
+        // to indeksy komórek (gx/gy), nie piksele, więc działa poprawnie
+        // niezależnie od rozmiaru canvasu po resize (CELL_W/CELL_H i tak są
+        // przeliczane na bieżąco w draw()).
+        const SPARKLE_COUNT = 55;
+        const sparklePoints = Array.from({ length: SPARKLE_COUNT }, () => ({
+            gx: Math.floor(Math.random() * (GRID_SIZE + 1)),
+            gy: Math.floor(Math.random() * (GRID_SIZE + 1)),
+            phase: Math.random() * Math.PI * 2,
+            speed: 0.35 + Math.random() * 0.75,
+            size: 1.2 + Math.random() * 1.4
+        }));
         // Osobne wymiary komórki dla X/Y - siatka ROZCIĄGA SIĘ na cały
         // prostokąt canvasu (bez zawijania/przycinania), niezależnie od
         // proporcji ekranu - tak jak wymaga tego pełnoekranowy tryb poziomy.
@@ -1742,6 +1758,22 @@
                 ctx.stroke();
             }
 
+            // Migotanie ("skrzenie się") kilkudziesięciu stałych punktów
+            // przecięcia - większość czasu wciąż niewidoczne (twinkle < 0.45
+            // pomijane), ale częściej i mocniej niż wcześniej, żeby efekt
+            // był wyraźniej widoczny bez zamieniania się w stały wzór.
+            // Kolor zawsze theme.p1 - jedyny akcent tła poza samą siatką.
+            for (const s of sparklePoints) {
+                const twinkle = 0.5 + 0.5 * Math.sin((now / 1000) * s.speed + s.phase);
+                if (twinkle < 0.45) continue;
+                const alpha = ((twinkle - 0.45) / 0.55) * 0.85;
+                const sx = s.gx * CELL_W, sy = s.gy * CELL_H;
+                ctx.fillStyle = window.__tronHexToRgba ? window.__tronHexToRgba(theme.p1, alpha) : `rgba(255, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(sx, sy, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
             drawPowerUps();
             drawRipple(p1);
             drawRipple(p2);
@@ -1817,56 +1849,60 @@
             return path;
         }
 
+        // Miesza kolor gracza z bielą o zadany ułamek - używane do budowania
+        // gradientów "ten sam kolor, ale jaśniejszy" (synthwave/amber), żeby
+        // KAŻDY motyw dawał bogatszy, dwutonowy ślad, ale bez utraty
+        // rozróżnialności graczy (gradient bazuje na WŁASNYM kolorze gracza,
+        // nie na jednej wspólnej palecie dla obu) - patrz theme-picker.js
+        // (THEMES) po bazowe kolory p1/p2 per motyw.
+        function mixHexWithWhite(hex, amt) {
+            const h = hex.replace('#', '');
+            const r = parseInt(h.substring(0, 2), 16);
+            const g = parseInt(h.substring(2, 4), 16);
+            const b = parseInt(h.substring(4, 6), 16);
+            const nr = Math.round(r + (255 - r) * amt);
+            const ng = Math.round(g + (255 - g) * amt);
+            const nb = Math.round(b + (255 - b) * amt);
+            return '#' + [nr, ng, nb].map((v) => v.toString(16).padStart(2, '0')).join('');
+        }
+
+
+
+        // Środki komórek śladu w pikselach canvasu - ten sam przelicznik co
+        // buildTrailPath, ale jako zwykła tablica punktów zamiast Path2D,
+        // bo część stylów (matrix/amber/glacier) potrzebuje bezpośredniego
+        // dostępu do POSZCZEGÓLNYCH punktów (blok na komórkę, iskry w
+        // konkretnych indeksach), nie tylko gotowej ścieżki do obrysowania.
+        function trailPoints(trail) {
+            return trail.map((c) => ({ x: c.x * CELL_W + CELL_W / 2, y: c.y * CELL_H + CELL_H / 2 }));
+        }
+
+
+        // === RYSOWANIE GRACZA - STYL ZALEŻNY OD MOTYWU ===
+        // Każdy z 5 motywów (patrz THEMES wyżej) ma teraz WŁASNY styl śladu i
+        // głowy motocykla, nawiązujący do odpowiadającego mu motywu tła w
+        // wersji 3D (patrz src/backgroundThemes/*.js) - nie tylko inny kolor,
+        // ale inna technika rysowania. Gradient w synthwave/amber bazuje na
+        // WŁASNYM kolorze gracza (mixHexWithWhite), nie na jednej wspólnej
+        // palecie dla obu graczy - inaczej p1 i p2 zlewałyby się wizualnie w
+        // tych motywach, mimo osobnych kolorów w THEMES.
         function drawPlayer(player) {
             const now = performance.now();
             const len = player.trail.length;
             const ghostActive = player.ghostUntil && now < player.ghostUntil;
             const ghostAlpha = ghostActive ? 0.5 : 1; // duch - przenika przez ślady, więc rysujemy go półprzezroczyście
+            const themeKey = window.__tronThemeKey || 'classic';
 
-            // === JEDNOLITY, ŚWIECĄCY OGON ===
-            // Zamiast osobnych podświetlonych kratek (poprzednie podejście:
-            // fillRect na każdą komórkę z 1px marginesem, co zostawiało
-            // widoczne przerwy między polami) - jedna ciągła ścieżka przez
-            // środki wszystkich komórek śladu, rysowana grubą kreską z
-            // zaokrąglonymi łączeniami. To daje wizualnie spójną "wstęgę"
-            // dokładnie tam, gdzie przejechał motocykl, bez segmentacji na
-            // kratki. Świadomie NIE ma tu zanikania w stronę ogona (kometa)
-            // - ślad jest jednolicie jasny na całej długości.
-            if (len >= 2) {
-                const trailPath = buildTrailPath(player.trail);
-                ctx.globalAlpha = ghostAlpha;
+            ctx.globalAlpha = ghostAlpha;
+            if (themeKey === 'synthwave') drawTrailSynthwave(player, len);
+            else if (themeKey === 'matrix') drawTrailMatrix(player, len, now);
+            else if (themeKey === 'amber') drawTrailAmber(player, len, now);
+            else if (themeKey === 'glacier') drawTrailGlacier(player, len, now);
+            else drawTrailClassic(player, len, now);
+            ctx.globalAlpha = 1;
 
-                // Warstwa 1: szeroka, świecąca "rurka" w kolorze gracza.
-                ctx.strokeStyle = player.color;
-                ctx.lineWidth = Math.max(CELL_W, CELL_H) * 0.82;
-                ctx.lineJoin = 'round';
-                ctx.lineCap = 'round';
-                ctx.shadowColor = player.color;
-                ctx.shadowBlur = 10;
-                ctx.stroke(trailPath);
-
-                // Warstwa 2: skrzący się rdzeń - cienka, jasna kreska
-                // prowadzona środkiem wstęgi. Animowany lineDashOffset
-                // przesuwa segmenty kreski w czasie, dając efekt biegnących
-                // iskier/blasku wzdłuż śladu - bez pełnego "podążającego z
-                // opóźnieniem ogona", którego celowo tu nie robimy.
-                ctx.shadowBlur = 6;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
-                ctx.lineWidth = Math.max(CELL_W, CELL_H) * 0.22;
-                ctx.setLineDash([CELL_W * 1.4, CELL_W * 1.1]);
-                ctx.lineDashOffset = -(now / 40) % (CELL_W * 2.5);
-                ctx.stroke(trailPath);
-                ctx.setLineDash([]);
-
-                ctx.globalAlpha = 1;
-            } else if (len === 1) {
-                // Sam start rundy - jedna komórka, brak jeszcze odcinka do
-                // pociągnięcia. Głowa (rysowana niżej) wystarczająco to pokrywa.
-            }
-
-            // Głowa motocykla - wyraźnie jaśniejsza (większy blur) niż ślad,
-            // z małym białym "gorącym" rdzeniem pośrodku - czytelnie
-            // odróżnia przód pojazdu od reszty wstęgi.
+            // Głowa motocykla - rysowana zawsze wyraźnie jaśniej/z większym
+            // blurem niż ślad, żeby czytelnie odróżniać przód pojazdu.
             const head = player.trail[len - 1];
             if (head) {
                 const hx = head.x * CELL_W + CELL_W / 2;
@@ -1874,20 +1910,16 @@
                 const r = Math.max(CELL_W, CELL_H) * 0.65;
 
                 ctx.globalAlpha = ghostAlpha;
-                ctx.shadowBlur = 14;
-                ctx.fillStyle = player.color;
-                ctx.beginPath();
-                ctx.arc(hx, hy, r, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.shadowBlur = 0;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                ctx.beginPath();
-                ctx.arc(hx, hy, r * 0.38, 0, Math.PI * 2);
-                ctx.fill();
+                if (themeKey === 'synthwave') drawHeadSynthwave(player, hx, hy, r);
+                else if (themeKey === 'matrix') drawHeadMatrix(player, hx, hy, r);
+                else if (themeKey === 'amber') drawHeadAmber(player, hx, hy, r);
+                else if (themeKey === 'glacier') drawHeadGlacier(player, hx, hy, r);
+                else drawHeadClassic(player, hx, hy, r);
                 ctx.globalAlpha = 1;
 
-                // Tarcza - dodatkowy, pulsujący biały pierścień wokół głowy.
+                // Tarcza - dodatkowy, pulsujący biały pierścień wokół głowy,
+                // wspólny dla wszystkich motywów (to wskaźnik stanu gry, nie
+                // element stylu wizualnego).
                 if (player.shieldUntil && now < player.shieldUntil) {
                     const shieldPulse = 1 + Math.sin(now / 150) * 0.1;
                     ctx.strokeStyle = '#ffffff';
@@ -1900,6 +1932,299 @@
                 }
             }
             ctx.shadowBlur = 0;
+        }
+
+        // --- CLASSIC: jednolity, świecący ogon (domyślny, bez zmian) -------
+        // Jedna ciągła ścieżka przez środki komórek śladu, gruba świecąca
+        // "rurka" w kolorze gracza + animowany biały rdzeń iskrzący się
+        // wzdłuż ścieżki (lineDashOffset). Zero zanikania w stronę ogona -
+        // ślad jest jednolicie jasny na całej długości.
+        function drawTrailClassic(player, len, now) {
+            if (len < 2) return;
+            const trailPath = buildTrailPath(player.trail);
+
+            ctx.strokeStyle = player.color;
+            ctx.lineWidth = Math.max(CELL_W, CELL_H) * 0.82;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 10;
+            ctx.stroke(trailPath);
+
+            ctx.shadowBlur = 6;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+            ctx.lineWidth = Math.max(CELL_W, CELL_H) * 0.22;
+            ctx.setLineDash([CELL_W * 1.4, CELL_W * 1.1]);
+            ctx.lineDashOffset = -(now / 40) % (CELL_W * 2.5);
+            ctx.stroke(trailPath);
+            ctx.setLineDash([]);
+            ctx.shadowBlur = 0;
+        }
+
+        function drawHeadClassic(player, hx, hy, r) {
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(hx, hy, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.beginPath();
+            ctx.arc(hx, hy, r * 0.38, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // --- SYNTHWAVE: gradient + poprzeczne "skanlinie" -------------------
+        // Wstęga z gradientem od koloru gracza do jego jaśniejszej wersji
+        // (nie płaski, jednolity kolor jak classic) + cienkie poprzeczne
+        // kreski w regularnych odstępach wzdłuż śladu, nawiązujące do
+        // retro-siatki/scanline z backgroundThemes/synthwave.js w 3D. Głowa
+        // to świecący romb (kwadrat obrócony o 45°) zamiast koła.
+        function drawTrailSynthwave(player, len) {
+            if (len < 2) return;
+            const pts = trailPoints(player.trail);
+            const trailPath = buildTrailPath(player.trail);
+            const light = mixHexWithWhite(player.color, 0.55);
+            const grad = ctx.createLinearGradient(pts[0].x, pts[0].y, pts[len - 1].x, pts[len - 1].y);
+            grad.addColorStop(0, player.color);
+            grad.addColorStop(1, light);
+
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = Math.max(CELL_W, CELL_H) * 0.82;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 10;
+            ctx.stroke(trailPath);
+            ctx.shadowBlur = 0;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+            ctx.lineWidth = 1;
+            const tickGap = Math.max(CELL_W, CELL_H) * 0.9;
+            const half = Math.max(CELL_W, CELL_H) * 0.32;
+            for (let i = 1; i < pts.length; i++) {
+                const a = pts[i - 1], b = pts[i];
+                const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+                if (segLen < 1) continue;
+                const dx = (b.x - a.x) / segLen, dy = (b.y - a.y) / segLen;
+                const nx = -dy * half, ny = dx * half;
+                for (let d = tickGap / 2; d < segLen; d += tickGap) {
+                    const px = a.x + dx * d, py = a.y + dy * d;
+                    ctx.beginPath();
+                    ctx.moveTo(px - nx, py - ny);
+                    ctx.lineTo(px + nx, py + ny);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawHeadSynthwave(player, hx, hy, r) {
+            const light = mixHexWithWhite(player.color, 0.6);
+            ctx.save();
+            ctx.translate(hx, hy);
+            ctx.rotate(Math.PI / 4);
+            const grad = ctx.createLinearGradient(-r, -r, r, r);
+            grad.addColorStop(0, player.color);
+            grad.addColorStop(1, light);
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = grad;
+            ctx.fillRect(-r * 0.85, -r * 0.85, r * 1.7, r * 1.7);
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            ctx.fillRect(-r * 0.26, -r * 0.26, r * 0.52, r * 0.52);
+            ctx.restore();
+        }
+
+        // --- MATRIX: osobne, migoczące bloki ze znakami ---------------------
+        // Zamiast jednej ciągłej wstęgi - każda komórka śladu to osobny,
+        // migoczący (sin-owa alpha) kwadrat z małym znakiem (cyfra/glif) w
+        // środku, jak w backgroundThemes/matrix.js w 3D. Głowa to większy,
+        // jaśniejszy blok z pogrubionym "0" pośrodku.
+        const MATRIX_GLYPHS = '01アイウエオカキク';
+
+        function drawTrailMatrix(player, len, now) {
+            if (len < 1) return;
+            const pts = trailPoints(player.trail);
+            const size = Math.max(CELL_W, CELL_H) * 0.78;
+            ctx.font = `${Math.round(size * 0.62)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for (let i = 0; i < len - 1; i++) { // ostatnia komórka to głowa - rysowana osobno
+                const p = pts[i];
+                const flick = 0.5 + 0.5 * Math.sin(now / 150 + i * 1.7);
+                // Kolor bloku to WŁASNY kolor gracza (theme.p1/theme.p2 -
+                // dokładnie tak samo jak w wersji 3D, patrz main.js
+                // #initPlayer/#initOpponent) - to on odróżnia ślad p1 od p2,
+                // NIE jakiś wspólny, sztuczny podział odcieni w obrębie
+                // jednego śladu. Dla motywu matrix p1='#39ff14'
+                // (fluorescencyjna zieleń), p2='#0d7a3f' (przygaszona,
+                // "zgniła" zieleń) - patrz THEMES wyżej.
+                ctx.shadowColor = player.color;
+                ctx.shadowBlur = 7;
+                ctx.fillStyle = window.__tronHexToRgba ? window.__tronHexToRgba(player.color, 0.35 + 0.55 * flick) : player.color;
+                ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(4, 20, 4, 0.85)';
+                ctx.fillText(MATRIX_GLYPHS[(i + Math.floor(now / 300)) % MATRIX_GLYPHS.length], p.x, p.y + 1);
+            }
+        }
+
+        function drawHeadMatrix(player, hx, hy, r) {
+            const size = r * 1.9;
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = player.color;
+            ctx.fillRect(hx - size / 2, hy - size / 2, size, size);
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(4, 20, 4, 0.9)';
+            ctx.font = `bold ${Math.round(size * 0.62)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('0', hx, hy + 1);
+        }
+
+        // --- AMBER: pulsująca "lawa" + iskry ---------------------------------
+        // Gradient od koloru gracza do jego jaśniejszej wersji, GRUBOŚĆ
+        // wstęgi pulsuje sinusoidalnie (efekt płynącej lawy, patrz
+        // backgroundThemes/amber.js w 3D) + kilka iskier unoszących się znad
+        // śladu w stałych, zakotwiczonych w komórkach punktach. Głowa to
+        // świecący sześciokąt z gorącym, jasnym rdzeniem.
+        function drawTrailAmber(player, len, now) {
+            if (len < 2) return;
+            const pts = trailPoints(player.trail);
+            const trailPath = buildTrailPath(player.trail);
+            const light = mixHexWithWhite(player.color, 0.55);
+            const grad = ctx.createLinearGradient(pts[0].x, pts[0].y, pts[len - 1].x, pts[len - 1].y);
+            grad.addColorStop(0, player.color);
+            grad.addColorStop(1, light);
+
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = Math.max(CELL_W, CELL_H) * (0.72 + Math.sin(now / 180) * 0.12);
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 12;
+            ctx.stroke(trailPath);
+            ctx.shadowBlur = 0;
+
+            const emberColor = mixHexWithWhite(player.color, 0.7);
+            for (let i = 0; i < len - 1; i += 4) {
+                const p = pts[i];
+                const phase = ((now / 22) + i * 37) % 100 / 100;
+                const ex = p.x + Math.sin(i * 12.9) * CELL_W * 0.3;
+                const ey = p.y - phase * CELL_H * 2.2;
+                const alpha = Math.sin(phase * Math.PI);
+                if (alpha <= 0) continue;
+                ctx.fillStyle = window.__tronHexToRgba ? window.__tronHexToRgba(emberColor, alpha * 0.9) : emberColor;
+                ctx.shadowColor = emberColor;
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+                ctx.arc(ex, ey, Math.max(1.2, CELL_W * 0.1), 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function drawHeadAmber(player, hx, hy, r) {
+            const light = mixHexWithWhite(player.color, 0.6);
+            const grad = ctx.createLinearGradient(hx - r, hy - r, hx + r, hy + r);
+            grad.addColorStop(0, player.color);
+            grad.addColorStop(1, light);
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 16;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const a = Math.PI / 3 * i - Math.PI / 6;
+                const px = hx + Math.cos(a) * r * 1.15;
+                const py = hy + Math.sin(a) * r * 1.15;
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 220, 0.92)';
+            ctx.beginPath();
+            ctx.arc(hx, hy, r * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // --- GLACIER: fasetowana krawędź + migoczące gwiazdki ---------------
+        // Bazowa wstęga jak classic, ale zamiast gładkiej białej iskry -
+        // kanciasta, "krystaliczna" linia (naprzemienny odchył prostopadły
+        // do kierunku segmentu) na wierzchu, plus kilka migoczących
+        // gwiazdek-krzyżyków w stałych punktach śladu (patrz
+        // backgroundThemes/glacier.js w 3D). Głowa to fasetowany sześciokąt
+        // (kryształ) z gradientem biel->kolor gracza.
+        function drawTrailGlacier(player, len, now) {
+            if (len < 2) return;
+            const pts = trailPoints(player.trail);
+            const trailPath = buildTrailPath(player.trail);
+
+            ctx.strokeStyle = player.color;
+            ctx.lineWidth = Math.max(CELL_W, CELL_H) * 0.74;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 10;
+            ctx.stroke(trailPath);
+            ctx.shadowBlur = 0;
+
+            ctx.beginPath();
+            for (let i = 0; i < pts.length; i++) {
+                const cur = pts[i];
+                const next = pts[i + 1] || cur;
+                const dx = next.x - cur.x, dy = next.y - cur.y;
+                const segLen = Math.hypot(dx, dy) || 1;
+                const nx = -dy / segLen, ny = dx / segLen;
+                const jag = (i % 2 === 0 ? 1 : -1) * CELL_W * 0.16;
+                const jx = cur.x + nx * jag, jy = cur.y + ny * jag;
+                if (i === 0) ctx.moveTo(jx, jy); else ctx.lineTo(jx, jy);
+            }
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = 1.6;
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 4;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            for (let i = 0; i < len - 1; i += 5) {
+                const p = pts[i];
+                const tw = 0.35 + 0.65 * Math.abs(Math.sin(now / 220 + i * 2));
+                ctx.strokeStyle = `rgba(255, 255, 255, ${tw})`;
+                ctx.lineWidth = 1;
+                const s = CELL_W * 0.22;
+                ctx.beginPath();
+                ctx.moveTo(p.x - s, p.y); ctx.lineTo(p.x + s, p.y);
+                ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x, p.y + s);
+                ctx.stroke();
+            }
+        }
+
+        function drawHeadGlacier(player, hx, hy, r) {
+            const grad = ctx.createLinearGradient(hx - r, hy - r, hx + r, hy + r);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(1, player.color);
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const a = Math.PI / 3 * i;
+                const px = hx + Math.cos(a) * r * 1.1;
+                const py = hy + Math.sin(a) * r * 1.1;
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.beginPath();
+            ctx.arc(hx - r * 0.25, hy - r * 0.25, r * 0.22, 0, Math.PI * 2);
+            ctx.fill();
         }
 
         // === POWER-UPY: RYSOWANIE, SPAWN, ZBIERANIE, EFEKTY ===
