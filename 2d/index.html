@@ -260,7 +260,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: rgba(5, 8, 17, 0.92);
+            background: radial-gradient(circle at 50% 55%, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.42) 45%, rgba(0, 0, 0, 0.86) 100%);
             gap: 20px;
             z-index: 20;
             transition: opacity 0.3s ease;
@@ -271,11 +271,68 @@
             pointer-events: none;
         }
 
+        /* Dwie cienkie, przecinające się smugi światła przelatujące za
+           tytułem - nawiązanie do samych świetlnych motocykli z rozgrywki,
+           bardzo stonowane (szczyt opacity ~0.5), pętla w nieskończoność
+           (to tylko ambientowa dekoracja, w przeciwieństwie do bootFlicker
+           tytułu, który jest jednorazowy). pointer-events:none, żeby nigdy
+           nie przejęły kliknięcia w przycisk pod spodem. */
+        .overlay-trail {
+            position: absolute;
+            top: 0;
+            height: 2px;
+            width: 55%;
+            background: linear-gradient(90deg, transparent, rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.9), transparent);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .overlay-trail.t1 {
+            top: 32%;
+            animation: overlaySweep1 4.5s linear infinite;
+        }
+
+        .overlay-trail.t2 {
+            top: 66%;
+            animation: overlaySweep2 5.5s linear infinite;
+            animation-delay: 1.2s;
+        }
+
+        @keyframes overlaySweep1 {
+            0% { left: -60%; opacity: 0; transform: rotate(-6deg); }
+            12% { opacity: 0.5; }
+            85% { opacity: 0.5; }
+            100% { left: 100%; opacity: 0; transform: rotate(-6deg); }
+        }
+
+        @keyframes overlaySweep2 {
+            0% { left: -60%; opacity: 0; transform: rotate(4deg); }
+            12% { opacity: 0.4; }
+            85% { opacity: 0.4; }
+            100% { left: 100%; opacity: 0; transform: rotate(4deg); }
+        }
+
         #overlay-title {
             font-size: clamp(2rem, 6vw, 3rem);
             color: var(--theme-p1);
             text-shadow: 0 0 20px var(--theme-p1), 0 0 40px var(--theme-p1);
             letter-spacing: 4px;
+            animation: bootFlicker 1.3s steps(1, end) 1 both;
+        }
+
+        /* Efekt "rozruchu starego terminala" - kilka szybkich mignięć
+           zanim tytuł zostaje na dobre. Odtwarza się raz, przy pierwszym
+           wejściu elementu na stronę - kolejne pokazania overlayu (pauza,
+           powrót po rundzie, przełączanie .hidden) NIE wyzwalają go
+           ponownie, bo to zwykła, nie-nieskończona animacja CSS. */
+        @keyframes bootFlicker {
+            0% { opacity: 0; }
+            8% { opacity: 1; }
+            11% { opacity: 0.15; }
+            16% { opacity: 1; }
+            21% { opacity: 0.3; }
+            26% { opacity: 1; }
+            100% { opacity: 1; }
         }
 
         #overlay-msg {
@@ -283,6 +340,12 @@
             color: #e0f7fc;
             text-align: center;
             padding: 0 20px;
+            opacity: 0;
+            animation: overlayFadeIn 0.6s ease 1.1s 1 forwards;
+        }
+
+        @keyframes overlayFadeIn {
+            to { opacity: 1; }
         }
 
         .btn-start {
@@ -297,6 +360,18 @@
             cursor: pointer;
             box-shadow: 0 0 30px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.5);
             transition: all 0.2s ease;
+            opacity: 0;
+            animation: overlayFadeIn 0.6s ease 1.3s 1 forwards, btnBreathe 3s ease-in-out 2s infinite;
+        }
+
+        /* Delikatna, wolna pulsacja poświaty w spoczynku - "oddychający"
+           przycisk, żeby przyciągał wzrok na ekranie startowym bez
+           migotania (odróżnienie od bootFlicker, który jest szybki i
+           jednorazowy). Zaczyna się dopiero po zakończeniu fade-in
+           (animation-delay: 2s), żeby oba efekty się nie nakładały. */
+        @keyframes btnBreathe {
+            0%, 100% { box-shadow: 0 0 22px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.45); }
+            50% { box-shadow: 0 0 40px rgba(var(--theme-p1-r), var(--theme-p1-g), var(--theme-p1-b), 0.75); }
         }
 
         .btn-start:hover {
@@ -311,6 +386,12 @@
             box-shadow: 0 0 24px rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.4);
             font-size: clamp(0.85rem, 2.6vw, 1.05rem);
             padding: clamp(10px, 3.2vw, 13px) clamp(24px, 6vw, 36px);
+            animation: overlayFadeIn 0.6s ease 1.45s 1 forwards, btnBreatheP2 3s ease-in-out 2.15s infinite;
+        }
+
+        @keyframes btnBreatheP2 {
+            0%, 100% { box-shadow: 0 0 18px rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.4); }
+            50% { box-shadow: 0 0 32px rgba(var(--theme-p2-r), var(--theme-p2-g), var(--theme-p2-b), 0.68); }
         }
 
         .btn-mp:hover {
@@ -1004,6 +1085,8 @@
             <canvas id="tronCanvas"></canvas>
             <div id="crtOverlay"></div>
             <div id="overlay" class="overlay">
+                <div class="overlay-trail t1" aria-hidden="true"></div>
+                <div class="overlay-trail t2" aria-hidden="true"></div>
                 <h2 id="overlay-title">SYSTEM READY</h2>
                 <p id="overlay-msg">Kliknij przycisk lub naciśnij <strong>SPACJĘ</strong></p>
                 <button id="start-btn" class="btn-start">URUCHOM CYKL</button>
